@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+@import '@rozenite/ui/styles.css';
+
+/*
+ * Tailwind's automatic source detection skips anything above the stylesheet's
+ * own directory, and this file lives in `src/panel/`. Point it at `src/` so
+ * classes used by the SDK-adjacent panel modules are still collected.
+ */
+@source "../../src";
+
+/*
+ * Status colours.
+ *
+ * `@rozenite/ui`'s palette is deliberately small — one brand colour plus
+ * `destructive` — because most panels only ever signal "bad". A cache inspector
+ * has to distinguish fresh / fetching / errored at a glance, so the three tones
+ * it needs beyond the shared set are defined here rather than borrowed from
+ * tokens that mean something else. Seeded rows reuse `primary`: a seed is not a
+ * health state, it is a thing *you* did, and it should read that way.
+ */
+@theme inline {
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+:root {
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #c0392b;
+}
+
+.dark {
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #fa7171;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}

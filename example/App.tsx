@@ -1,0 +1,334 @@
+import { useState } from 'react'
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from 'react-native'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
+import { StatusBar } from 'expo-status-bar'
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { useQuerySeeder } from '@avasapp/rozenite-plugin-query-seed'
+
+import {
+  fetchNotifications,
+  fetchSettings,
+  fetchThread,
+  fetchTodos,
+  fetchUser,
+  isFailing,
+  setFailing,
+} from './api'
+
+/**
+ * Example app for `@avasapp/rozenite-plugin-query-seed`.
+ *
+ * The API here is a fake — realistic shapes, realistic latency, no network and
+ * no account. Everything else is real: a real `QueryClient`, real `useQuery`
+ * calls, the actual `useQuerySeeder` hook and the actual Rozenite bridge, so
+ * what the panel does here is what it does in a production app.
+ *
+ * Run it, press `j` to open React Native DevTools, and pick the **Query Seed**
+ * tab. Seed `["todos"]`, then hit "Break the API" — the screen keeps rendering
+ * your data while every real request behind it fails.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    // Short but non-zero, so refetches are frequent enough to prove a seed
+    // actually survives them rather than merely being written once.
+    queries: { staleTime: 5_000, retry: 1 },
+  },
+})
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Root />
+    </QueryClientProvider>
+  )
+}
+
+function Root() {
+  const isDark = useColorScheme() === 'dark'
+  const theme = isDark ? dark : light
+
+  // This is the only line an app needs. Everything below is example scaffolding.
+  useQuerySeeder(queryClient)
+
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={[styles.root, theme.root]} edges={['top', 'bottom']}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={[styles.title, theme.title]}>Query Seed</Text>
+          <Text style={[styles.subtitle, theme.subtitle]}>
+            Open React Native DevTools → Query Seed, then seed any of these.
+          </Text>
+
+          <Controls theme={theme} />
+
+          <Panel label='["todos"]' theme={theme}>
+            <TodosCard theme={theme} />
+          </Panel>
+
+          <Panel label='["user", 7]' theme={theme}>
+            <UserCard theme={theme} />
+          </Panel>
+
+          <Panel label='["settings"]' theme={theme}>
+            <SettingsCard theme={theme} />
+          </Panel>
+
+          <Panel label='["thread", 42]' theme={theme}>
+            <ThreadCard theme={theme} />
+          </Panel>
+
+          <Panel label='["notifications"]' theme={theme}>
+            <NotificationsCard theme={theme} />
+          </Panel>
+        </ScrollView>
+      </SafeAreaView>
+    </SafeAreaProvider>
+  )
+}
+
+function Controls({ theme }: { theme: Theme }) {
+  const client = useQueryClient()
+  const [failing, setFailingState] = useState(isFailing())
+
+  return (
+    <View style={styles.controls}>
+      <Button
+        label={failing ? 'Repair the API' : 'Break the API'}
+        onPress={() => {
+          const next = !failing
+          setFailing(next)
+          setFailingState(next)
+          client.invalidateQueries()
+        }}
+        theme={theme}
+        tone={failing ? 'danger' : 'default'}
+      />
+      <Button
+        label="Refetch all"
+        onPress={() => client.invalidateQueries()}
+        theme={theme}
+      />
+    </View>
+  )
+}
+
+function TodosCard({ theme }: { theme: Theme }) {
+  const { data, status, fetchStatus, error } = useQuery({
+    queryKey: ['todos'],
+    queryFn: fetchTodos,
+  })
+  return (
+    <State error={error} fetchStatus={fetchStatus} status={status} theme={theme}>
+      {data?.data.map((todo) => (
+        <Text key={todo.id} style={[styles.row, theme.row]}>
+          {todo.done ? '✓' : '○'} {todo.title}
+        </Text>
+      ))}
+    </State>
+  )
+}
+
+function UserCard({ theme }: { theme: Theme }) {
+  const { data, status, fetchStatus, error } = useQuery({
+    queryKey: ['user', 7],
+    queryFn: () => fetchUser(7),
+  })
+  return (
+    <State error={error} fetchStatus={fetchStatus} status={status} theme={theme}>
+      <Text style={[styles.row, theme.row]}>{data?.data.name}</Text>
+      <Text style={[styles.dim, theme.dim]}>{data?.data.email}</Text>
+    </State>
+  )
+}
+
+function SettingsCard({ theme }: { theme: Theme }) {
+  const { data, status, fetchStatus, error } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchSettings,
+  })
+  return (
+    <State error={error} fetchStatus={fetchStatus} status={status} theme={theme}>
+      <Text style={[styles.row, theme.row]}>theme: {data?.data.theme}</Text>
+      <Text style={[styles.dim, theme.dim]}>
+        flags: {JSON.stringify(data?.data.flags)}
+      </Text>
+    </State>
+  )
+}
+
+function ThreadCard({ theme }: { theme: Theme }) {
+  const { data, status, fetchStatus, error } = useQuery({
+    queryKey: ['thread', 42],
+    queryFn: () => fetchThread(42),
+  })
+  return (
+    <State error={error} fetchStatus={fetchStatus} status={status} theme={theme}>
+      <Text style={[styles.row, theme.row]}>
+        {data?.data.author}: {data?.data.body}
+      </Text>
+      <Text style={[styles.dim, theme.dim]}>
+        {data?.data.replies.length ?? 0} replies
+      </Text>
+    </State>
+  )
+}
+
+function NotificationsCard({ theme }: { theme: Theme }) {
+  const { data, status, fetchStatus, error } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+  })
+  return (
+    <State error={error} fetchStatus={fetchStatus} status={status} theme={theme}>
+      {data?.data.map((item) => (
+        <Text key={item.id} style={[styles.row, theme.row]}>
+          [{item.kind}]{' '}
+          {item.kind === 'mention'
+            ? `${item.from} mentioned you`
+            : item.kind === 'system'
+              ? item.message
+              : `${item.count} updates`}
+        </Text>
+      ))}
+    </State>
+  )
+}
+
+// ---- presentation ----
+
+function State({
+  status,
+  fetchStatus,
+  error,
+  theme,
+  children,
+}: {
+  status: string
+  fetchStatus: string
+  error: unknown
+  theme: Theme
+  children: React.ReactNode
+}) {
+  if (status === 'pending') {
+    return <Text style={[styles.dim, theme.dim]}>loading…</Text>
+  }
+  if (status === 'error') {
+    return (
+      <Text style={styles.error}>
+        {error instanceof Error ? error.message : 'failed'}
+      </Text>
+    )
+  }
+  return (
+    <>
+      {children}
+      {fetchStatus === 'fetching' ? (
+        <Text style={[styles.dim, theme.dim]}>refetching…</Text>
+      ) : null}
+    </>
+  )
+}
+
+function Panel({
+  label,
+  theme,
+  children,
+}: {
+  label: string
+  theme: Theme
+  children: React.ReactNode
+}) {
+  return (
+    <View style={[styles.panel, theme.panel]}>
+      <Text style={[styles.key, theme.key]}>{label}</Text>
+      {children}
+    </View>
+  )
+}
+
+function Button({
+  label,
+  onPress,
+  theme,
+  tone = 'default',
+}: {
+  label: string
+  onPress: () => void
+  theme: Theme
+  tone?: 'default' | 'danger'
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        theme.button,
+        tone === 'danger' && styles.buttonDanger,
+        pressed && styles.buttonPressed,
+      ]}
+    >
+      <Text style={[styles.buttonLabel, theme.buttonLabel]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+type Theme = typeof light
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  content: { padding: 16, gap: 12 },
+  title: { fontSize: 22, fontWeight: '700' },
+  subtitle: { fontSize: 13, marginBottom: 4 },
+  controls: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  panel: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 4 },
+  key: { fontFamily: 'Menlo', fontSize: 12, marginBottom: 4 },
+  row: { fontSize: 14 },
+  dim: { fontSize: 12 },
+  error: { fontSize: 13, color: '#c0392b' },
+  button: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  buttonDanger: { borderColor: '#c0392b' },
+  buttonPressed: { opacity: 0.6 },
+  buttonLabel: { fontSize: 13, fontWeight: '600' },
+})
+
+const light = StyleSheet.create({
+  root: { backgroundColor: '#fbfbfd' },
+  title: { color: '#111' },
+  subtitle: { color: '#666' },
+  panel: { backgroundColor: '#fff', borderColor: '#e4e4e7' },
+  key: { color: '#7c3aed' },
+  row: { color: '#111' },
+  dim: { color: '#777' },
+  button: { backgroundColor: '#fff', borderColor: '#d4d4d8' },
+  buttonLabel: { color: '#111' },
+})
+
+const dark = StyleSheet.create({
+  root: { backgroundColor: '#0b0b0d' },
+  title: { color: '#f4f4f5' },
+  subtitle: { color: '#a1a1aa' },
+  panel: { backgroundColor: '#151517', borderColor: '#27272a' },
+  key: { color: '#c4b5fd' },
+  row: { color: '#f4f4f5' },
+  dim: { color: '#a1a1aa' },
+  button: { backgroundColor: '#1c1c1f', borderColor: '#3f3f46' },
+  buttonLabel: { color: '#f4f4f5' },
+})

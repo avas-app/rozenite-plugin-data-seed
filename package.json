@@ -1,0 +1,80 @@
+{
+  "name": "@avasapp/rozenite-plugin-query-seed",
+  "version": "0.1.0",
+  "description": "Seed fake data into a TanStack Query cache from React Native DevTools — without touching your source.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/avas-app/rozenite-plugin-query-seed#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avas-app/rozenite-plugin-query-seed.git"
+  },
+  "bugs": {
+    "url": "https://github.com/avas-app/rozenite-plugin-query-seed/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "main": "./dist/react-native/index.cjs",
+  "module": "./dist/react-native/index.js",
+  "types": "./dist/react-native/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/react-native/index.d.ts",
+      "import": "./dist/react-native/index.js",
+      "require": "./dist/react-native/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src/shared"
+  ],
+  "keywords": [
+    "tanstack-query",
+    "react-query",
+    "react-native",
+    "devtools",
+    "rozenite",
+    "mocking",
+    "fixtures",
+    "debugging"
+  ],
+  "scripts": {
+    "build": "rozenite build",
+    "dev": "rozenite dev",
+    "test": "bun test src/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "tsc -p tsconfig.json --noEmit && rozenite build"
+  },
+  "dependencies": {
+    "@rozenite/plugin-bridge": "^2.1.0"
+  },
+  "devDependencies": {
+    "@rozenite/ui": "^2.1.0",
+    "@rozenite/vite-plugin": "^2.1.0",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@tanstack/react-query": "^5.66.0",
+    "@types/bun": "^1.3.14",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.1.7",
+    "lucide-react": "^0.263.1",
+    "postcss": "^8.5.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.1",
+    "react-native-web": "^0.21.2",
+    "rozenite": "^2.1.0",
+    "tailwindcss": "^4.2.2",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Query Seed Example",
+    "slug": "rozenite-plugin-query-seed-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.rozenite.queryseedexample"
+    },
+    "android": {
+      "package": "dev.rozenite.queryseedexample"
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
+  }
+}
