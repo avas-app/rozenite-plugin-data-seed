@@ -5,6 +5,8 @@
     "": {
       "name": "@avasapp/rozenite-plugin-query-seed",
       "dependencies": {
+        "@rozenite/agent-bridge": "2.1.0",
+        "@rozenite/agent-shared": "2.1.0",
         "@rozenite/plugin-bridge": "^2.1.0",
       },
       "devDependencies": {
@@ -30,7 +32,11 @@
       "peerDependencies": {
         "react": "*",
         "react-native": "*",
+        "ts-json-schema-generator": ">=2",
       },
+      "optionalPeers": [
+        "ts-json-schema-generator",
+      ],
     },
   },
   "packages": {
@@ -287,6 +293,8 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.62.4", "", { "os": "win32", "cpu": "x64" }, "sha512-qPzHqdj9rfUD+w79dtE07zi/kFwKyCJqplp5K5ygeLTp7jLpAoc16OAH39HSmRC9UpozaecsleI8uAdEj6v2yw=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.62.4", "", { "os": "win32", "cpu": "x64" }, "sha512-zD6NdeWEByGE9QF9vCrlJ5YQB4oq9q91kPZS37Jwj5hOkvR1lTBSpsKhKDw4IJtbQ35LsTS1HD9DZYGKIshU1Q=="],
+
+    "@rozenite/agent-bridge": ["@rozenite/agent-bridge@2.1.0", "", { "dependencies": { "@rozenite/agent-shared": "2.1.0", "@rozenite/plugin-bridge": "2.1.0", "tslib": "^2.3.0" }, "peerDependencies": { "react": ">=17" } }, "sha512-SbiweOTeamWohkbp5mW5GBDCvm4SzUP7Iv575qe9hyjRq1EsqpZpaJzKO1GCDjtdF7tTuGgTI8baAHGW9D5Q8A=="],
 
     "@rozenite/agent-sdk": ["@rozenite/agent-sdk@2.1.0", "", { "dependencies": { "@rozenite/agent-shared": "2.1.0", "tslib": "^2.3.0" } }, "sha512-MW1EEZOmFYn64TI2Qr6CIAFxf+pWyp7eefm4gmLD9B93d1BBVmijsf13hx4Tyh3qlGAQ/h93lQ64LnI3i57daw=="],
 

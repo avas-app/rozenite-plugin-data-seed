@@ -10,8 +10,9 @@ import type {
   SourceFrame,
 } from '../shared/types'
 import type { LoadedFixtures } from './fixtures'
+import type { Fixture } from '../shared/fixture'
 import type { SchemaEntry } from '../shared/schema'
-import { findSchema } from '../shared/schema'
+import { findByPattern } from '../shared/schema'
 import { approximateSize, serialize } from './serialize'
 
 /**
@@ -95,7 +96,7 @@ export class Session {
 
   /** The schema for one key, or null when nothing matches it. */
   schemaFor(queryKey: unknown[]): unknown | null {
-    return findSchema(this.#schemas, queryKey)?.schema ?? null
+    return findByPattern(this.#schemas, queryKey)?.schema ?? null
   }
 
   get schemaSummaries(): SchemaSummary[] {
@@ -123,6 +124,40 @@ export class Session {
 
   get fixtureProblems(): FixtureProblem[] {
     return this.#fixtures.problems
+  }
+
+  get capabilities(): Capabilities {
+    return this.#capabilities
+  }
+
+  /** Everything below exists for the agent surface, which addresses by key. */
+
+  hashKey(queryKey: readonly unknown[]): string | null {
+    return this.#driver?.hashKey(queryKey) ?? null
+  }
+
+  listQueries(): QuerySnapshot[] {
+    return this.#driver?.listQueries() ?? []
+  }
+
+  /** Resolves a fixture by id first, then by exact name. */
+  findFixture(reference: string): Fixture | null {
+    const byId = this.#fixtures.byId.get(reference)
+    if (byId) return byId
+    const summary = this.#fixtures.summaries.find((item) => item.name === reference)
+    return summary ? (this.#fixtures.byId.get(summary.id) ?? null) : null
+  }
+
+  schemaEntryFor(queryKey: unknown[]): SchemaEntry | null {
+    return findByPattern(this.#schemas, queryKey)
+  }
+
+  /** Clears by key rather than hash, since a caller writes keys, not hashes. */
+  clearByKey(queryKey: readonly unknown[]): boolean {
+    const hash = this.hashKey(queryKey)
+    if (!hash || !this.#seeds.has(hash)) return false
+    this.clear(hash)
+    return true
   }
 
   attachSink(sink: SessionSink | null): void {

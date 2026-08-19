@@ -1,10 +1,5 @@
 import type { Fixture, FixtureSummary } from '../../shared/fixture'
-import {
-  isFixtureFile,
-  parseFixture,
-  serializeFixture,
-  toFileName,
-} from '../../shared/fixture'
+import { serializeFixture, toFileName } from '../../shared/fixture'
 import { idbDelete, idbGet, idbSet } from './idb'
 import {
   FixturePermissionError,
@@ -25,9 +20,6 @@ import {
 type Permission = 'granted' | 'denied' | 'prompt'
 
 type FileHandleLike = {
-  kind: 'file'
-  name: string
-  getFile: () => Promise<{ text: () => Promise<string>; size: number }>
   createWritable: () => Promise<{
     write: (data: string) => Promise<void>
     close: () => Promise<void>
@@ -43,8 +35,6 @@ type DirectoryHandleLike = {
     name: string,
     options?: { create?: boolean },
   ) => Promise<FileHandleLike>
-  removeEntry: (name: string) => Promise<void>
-  values: () => AsyncIterableIterator<FileHandleLike | DirectoryHandleLike>
 }
 
 const HANDLE_KEY = 'fixtures-directory'
@@ -130,37 +120,6 @@ export function createDirectoryStore(
     ready: Boolean(handle) && ready,
     label: handle?.name ?? null,
 
-    async list() {
-      const dir = requireHandle()
-      const summaries: FixtureSummary[] = []
-      for await (const entry of dir.values()) {
-        if (entry.kind !== 'file' || !isFixtureFile(entry.name)) continue
-        const file = await entry.getFile()
-        try {
-          const fixture = parseFixture(entry.name, await file.text())
-          summaries.push({
-            name: fixture.name,
-            fileName: entry.name,
-            queryKey: fixture.queryKey,
-            savedAt: fixture.savedAt,
-            byteLength: file.size,
-          })
-        } catch {
-          // A hand-edited or unrelated .json in the folder must not blank the
-          // whole list; it simply does not appear. Opening it surfaces the
-          // parse error with the filename.
-        }
-      }
-      return summaries.sort((a, b) => a.name.localeCompare(b.name))
-    },
-
-    async read(fileName) {
-      const dir = requireHandle()
-      const entry = await dir.getFileHandle(fileName)
-      const file = await entry.getFile()
-      return parseFixture(fileName, await file.text())
-    },
-
     async write(fixture: Fixture) {
       const dir = requireHandle()
       const fileName = toFileName(fixture.name)
@@ -178,8 +137,5 @@ export function createDirectoryStore(
       }
     },
 
-    async remove(fileName) {
-      await requireHandle().removeEntry(fileName)
-    },
   }
 }

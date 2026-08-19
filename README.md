@@ -236,12 +236,54 @@ Generation is reported honestly rather than papered over:
 Generation is seeded, so the same query and roll always produce the same value —
 pressing **Generate** again is what rerolls it.
 
+## Driving it without DevTools
+
+Everything the panel does is also a `rozenite agent` tool, so a test or a script
+can put the cache into a known state with no DevTools window open. That is the
+point of having committed fixtures — reaching the state is the slow part of an
+E2E run, not asserting on it.
+
+```bash
+npx rozenite agent targets
+npx rozenite agent session create
+npx rozenite agent avasapp/query-seed tools -s <session>
+
+npx rozenite agent avasapp/query-seed call -s <session> \
+  --tool '@avasapp/rozenite-plugin-query-seed.apply-fixture' \
+  --args '{"fixture": "cart with 50 items"}'
+```
+
+| Tool | What it does |
+| --- | --- |
+| `list-queries` | Every query in the cache, summarised — values are not returned |
+| `read-query` | One query's value; `found: false` rather than an error when absent |
+| `apply-seed` | Put a JSON value at a key and keep it there |
+| `clear-seed` / `clear-all-seeds` | Withdraw seeds and refetch |
+| `list-fixtures` | Bundled fixtures, plus files that failed to parse |
+| `apply-fixture` | Seed from a committed fixture, by id or name |
+| `generate-seed` | Generate from the query's schema; `dryRun` to preview |
+
+Writes report `persistent`. It is `false` when the `QueryClient` could not be
+hooked, meaning the seed is a one-shot write the next refetch erases — worth
+failing a test over, and far easier to diagnose here than three assertions later.
+
+For typed calls from Node, the descriptors are exported:
+
+```ts
+import { querySeedTools } from '@avasapp/rozenite-plugin-query-seed/sdk'
+
+await session.callTool(querySeedTools.applyFixture, {
+  fixture: 'cart with 50 items',
+})
+```
+
 ## Limitations
 
-- **Saving fixtures is not scriptable yet.** Reading works anywhere the bundle
-  runs, but writing goes through the browser, so CI cannot author fixtures. The
-  write path sits behind a `FixtureStore` interface so a CLI-backed
-  implementation can be added without touching the UI.
+- **Authoring fixtures is not scriptable.** Applying them is — see
+  [Driving it without DevTools](#driving-it-without-devtools) — but *creating* a
+  file goes through the browser, so CI cannot write new ones. The write path sits
+  behind a `FixtureStore` interface so a CLI-backed implementation can be added
+  without touching the UI.
 - **`queryFn`-level only.** This seeds what a query *resolves to*. It does not
   mock mutations, sequence responses, or simulate latency — that is a mock
   server's job, and [MSW](https://mswjs.io) already does it well.
@@ -252,8 +294,8 @@ pressing **Generate** again is what rerolls it.
 2. **Fixtures** — name a seed, write it to the repo, restore it in one click.
 3. **Typed generation** — JSON Schema extracted from your TypeScript types,
    annotated in-source with JSDoc. *(done)*
-4. **Headless access** — an agent domain plus a CLI-backed fixture store, so a
-   test run can seed a known cache state with no DevTools window open.
+4. **Headless access** — an agent domain, so a test run can seed a known
+   cache state with no DevTools window open. *(done)*
 
 ## Example app
 

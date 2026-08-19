@@ -28,11 +28,18 @@
       "import": "./dist/react-native/index.js",
       "require": "./dist/react-native/index.cjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./sdk": {
+      "development": "./sdk.ts",
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js",
+      "require": "./dist/sdk/index.cjs"
+    }
   },
   "files": [
     "dist",
     "bin",
+    "sdk.ts",
     "src/shared"
   ],
   "keywords": [
@@ -53,6 +60,8 @@
     "prepublishOnly": "tsc -p tsconfig.json --noEmit && rozenite build"
   },
   "dependencies": {
+    "@rozenite/agent-bridge": "2.1.0",
+    "@rozenite/agent-shared": "2.1.0",
     "@rozenite/plugin-bridge": "^2.1.0"
   },
   "devDependencies": {

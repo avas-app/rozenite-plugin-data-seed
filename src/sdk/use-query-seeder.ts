@@ -9,6 +9,7 @@ import { parseSchemasFile } from '../shared/schema'
 import type { QueryClientLike } from './instrument'
 import { instrumentClient } from './instrument'
 import { captureFrames } from './origin'
+import { useQuerySeedAgentTools } from './use-query-seed-agent-tools'
 import { Session } from './session'
 
 export type QuerySeederOptions = {
@@ -74,6 +75,11 @@ export function useQuerySeeder(
   const devToolsClient = useRozeniteDevToolsClient<QuerySeedEventMap>({
     pluginId: PLUGIN_ID,
   })
+
+  // Agent tools read the same session as the panel, and register independently
+  // of it — `rozenite agent` works with no DevTools window open, which is what
+  // lets a test put the cache into a known state before driving the UI.
+  useQuerySeedAgentTools({ sessionRef, enabled: active })
 
   // ---- instrumentation lifecycle (independent of the panel) ----
   useEffect(() => {
