@@ -29,13 +29,15 @@ export type ApiResponse<T> = {
 
 export type Todo = {
   id: number
+  /** @faker lorem.sentence */
   title: string
   done: boolean
-  /** @faker date.recent → iso */
+  /** @faker date.recent */
   createdAt: string
 }
 
 export type User = {
+  /** @faker number.int({min: 1, max: 9999}) */
   id: number
   /** @faker person.fullName */
   name: string
@@ -43,7 +45,7 @@ export type User = {
   email: string
   /** @faker image.avatar */
   avatarUrl: string
-  /** @faker date.past → iso */
+  /** @faker date.past */
   createdAt: string
 }
 
@@ -56,9 +58,11 @@ export type Settings = {
 /** Self-recursive: a comment thread of unbounded depth. */
 export type Comment = {
   id: number
+  /** @faker internet.userName */
   author: string
+  /** @faker lorem.paragraph */
   body: string
-  /** @faker date.recent → iso */
+  /** @faker date.recent */
   createdAt: string
   replies: Comment[]
 }

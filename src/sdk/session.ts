@@ -6,9 +6,12 @@ import type {
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
+  SchemaSummary,
   SourceFrame,
 } from '../shared/types'
 import type { LoadedFixtures } from './fixtures'
+import type { SchemaEntry } from '../shared/schema'
+import { findSchema } from '../shared/schema'
 import { approximateSize, serialize } from './serialize'
 
 /**
@@ -58,9 +61,14 @@ export class Session {
   #seeds = new Map<string, Seed>()
   #driver: SeedDriver | null = null
   #sink: SessionSink | null = null
-  #capabilities: Capabilities = { intercept: false, fixtures: false }
+  #capabilities: Capabilities = {
+    intercept: false,
+    fixtures: false,
+    schemas: false,
+  }
   #fixtures: LoadedFixtures = { summaries: [], problems: [], byId: new Map() }
   #frames: SourceFrame[] = []
+  #schemas: SchemaEntry[] = []
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #disposed = false
 
@@ -78,6 +86,23 @@ export class Session {
 
   setFrames(frames: SourceFrame[]): void {
     this.#frames = frames
+  }
+
+  setSchemas(entries: SchemaEntry[]): void {
+    this.#schemas = entries
+    this.#capabilities = { ...this.#capabilities, schemas: entries.length > 0 }
+  }
+
+  /** The schema for one key, or null when nothing matches it. */
+  schemaFor(queryKey: unknown[]): unknown | null {
+    return findSchema(this.#schemas, queryKey)?.schema ?? null
+  }
+
+  get schemaSummaries(): SchemaSummary[] {
+    return this.#schemas.map((entry) => ({
+      pattern: entry.pattern,
+      type: entry.type,
+    }))
   }
 
   setFixtures(fixtures: LoadedFixtures): void {
@@ -112,6 +137,7 @@ export class Session {
     this.#driver = null
     this.#seeds.clear()
     this.#fixtures = { summaries: [], problems: [], byId: new Map() }
+    this.#schemas = []
   }
 
   // ---- seed registry (read by the interceptor on every query resolution) ----
@@ -177,6 +203,7 @@ export class Session {
       seeds: this.seedList(),
       fixtures: this.#fixtures.summaries,
       fixtureProblems: this.#fixtures.problems,
+      schemas: this.schemaSummaries,
       capabilities: this.#capabilities,
     }
   }

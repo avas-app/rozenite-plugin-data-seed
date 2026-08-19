@@ -48,6 +48,7 @@ export function SeedEditor({
   onSaveFixture,
   canSaveFixture,
   intercept,
+  generate,
 }: {
   target: EditorTarget | null
   value: string
@@ -60,6 +61,8 @@ export function SeedEditor({
   onSaveFixture: (name: string, queryKey: unknown[], data: unknown) => void
   canSaveFixture: boolean
   intercept: boolean
+  /** Rendered above the editor when a schema covers this key. */
+  generate?: React.ReactNode
 }) {
   const [savingName, setSavingName] = useState<string | null>(null)
 
@@ -101,6 +104,8 @@ export function SeedEditor({
           next refetch will overwrite them.
         </p>
       ) : null}
+
+      {generate}
 
       <textarea
         className="min-h-0 flex-1 resize-none bg-transparent p-3 font-mono text-xs leading-relaxed text-foreground outline-none"

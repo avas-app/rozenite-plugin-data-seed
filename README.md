@@ -139,10 +139,105 @@ hint is shown rather than a wrong one.
 You can also just write the file yourself. Nothing about a fixture requires the
 panel to have created it.
 
+## Generating from your types
+
+Typing JSON by hand is still typing sample data. Point the extractor at your
+TypeScript types once and the panel can generate a whole response instead.
+
+```bash
+npm install --save-dev ts-json-schema-generator   # optional peer, only for this
+npx query-seed extract
+```
+
+It reads `query-seed.config.json`:
+
+```json
+{
+  "tsconfig": "./tsconfig.json",
+  "source": "./api.ts",
+  "out": "./query-seed.schemas.json",
+  "queries": [
+    { "key": ["todos"],     "type": "ApiResponse<Todo[]>" },
+    { "key": ["user", "*"], "type": "ApiResponse<User>" }
+  ]
+}
+```
+
+Then pass the result to the hook, alongside your fixtures:
+
+```ts
+useQuerySeeder(queryClient, {
+  fixtures: require.context('./seeds', false, /\.json$/),
+  schemas: require('./query-seed.schemas.json'),
+})
+```
+
+Select a query and a **Generate** button appears, with controls for array length
+and which union variant to produce.
+
+### The query key map is the part nothing can infer
+
+`"key"` → `"type"` is written by hand, and there is no way around it: TypeScript
+has no idea that `["user", 7]` returns a `User`. `"*"` matches any single
+element, so one entry covers every user. Patterns must match the key's length,
+so `["todos"]` never captures `["todos", "detail", 1]`, and an exact pattern
+beats a wildcard — `["user", 7]` can have its own schema without depending on
+file order.
+
+Generic instantiations work directly. `ApiResponse<Todo[]>` is not a named type
+and cannot be requested from a schema generator, so the CLI writes a temporary
+module that names it, extracts, and deletes it.
+
+### Controlling the values
+
+An unannotated `string` becomes lorem text, because a bare `string` genuinely
+could be a name, a URL, or an ISO date. Say which with a JSDoc tag on the field
+itself:
+
+```ts
+export type User = {
+  /** @faker number.int({min: 1, max: 9999}) */
+  id: number
+  /** @faker person.fullName */
+  name: string
+  /** @faker internet.email */
+  email: string
+  /** @faker date.past */
+  createdAt: string
+}
+```
+
+Annotations live in the source **deliberately**. A sidecar file keyed by type
+path rots silently the moment someone renames a field; a JSDoc tag cannot
+desync, gets reviewed in the same diff as the field, and survives refactors.
+
+Available tokens: `person.*` (firstName, lastName, fullName), `internet.*`
+(email, userName, url), `image.avatar`, `string.*` (uuid, alpha), `lorem.*`
+(words, sentence, paragraph), `date.*` (recent, past, soon, future), `number.*`
+(int, float), `datatype.boolean`, `phone.number`, `location.*` (city, country,
+streetAddress). Arguments are JSON: `number.int({min: 1, max: 10})`.
+
+There is no `@faker-js/faker` dependency — it is several megabytes for perhaps
+thirty generators. The token syntax is faker-shaped so it reads the way you
+expect; the implementations are local.
+
+### What it tells you it could not do
+
+Generation is reported honestly rather than papered over:
+
+- **`any` and `unknown` fields** produce `null` and a warning naming the path.
+  There is nothing to generate from, and inventing a shape would be worse.
+- **Numbers are whole by default.** TypeScript has one numeric type, so an id, a
+  count and a price all extract identically; most API numbers are integers, and
+  `"id": 839.05` reads as broken data. Use `@faker number.float` for decimals.
+- **Recursive types stop at a depth cap**, so a comment tree terminates.
+- **Unknown `@faker` tokens** warn instead of silently substituting something.
+
+Generation is seeded, so the same query and roll always produce the same value —
+pressing **Generate** again is what rerolls it.
+
 ## Limitations
 
-- **v1 is raw JSON.** You paste a value; there is no generation from types yet.
-  See [Roadmap](#roadmap).
 - **Saving fixtures is not scriptable yet.** Reading works anywhere the bundle
   runs, but writing goes through the browser, so CI cannot author fixtures. The
   write path sits behind a `FixtureStore` interface so a CLI-backed
@@ -155,11 +250,8 @@ panel to have created it.
 
 1. **Transport** — push arbitrary JSON at a key, make it stick. *(done)*
 2. **Fixtures** — name a seed, write it to the repo, restore it in one click.
-3. **Typed generation** — extract JSON Schema from the app's TypeScript types
-   via `ts-json-schema-generator`, annotate fields in-source with JSDoc
-   (`/** @faker person.fullName */`), and generate from that. Annotations live
-   next to the field deliberately: a sidecar keyed by type path silently rots
-   the moment someone renames something.
+3. **Typed generation** — JSON Schema extracted from your TypeScript types,
+   annotated in-source with JSDoc. *(done)*
 4. **Headless access** — an agent domain plus a CLI-backed fixture store, so a
    test run can seed a known cache state with no DevTools window open.
 

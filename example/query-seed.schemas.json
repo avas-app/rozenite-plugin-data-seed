@@ -1,0 +1,427 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-19T12:07:12.497Z",
+  "entries": [
+    {
+      "pattern": [
+        "todos"
+      ],
+      "type": "ApiResponse<Todo[]>",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-example_api.ts-1361-1509-example_api.ts-0-4636%5B%5D%3E",
+        "definitions": {
+          "ApiResponse<def-alias-example_api.ts-1361-1509-example_api.ts-0-4636[]>": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Todo"
+                }
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data",
+              "meta"
+            ],
+            "additionalProperties": false,
+            "description": "Generic envelope, as most real APIs have."
+          },
+          "Todo": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "title": {
+                "type": "string",
+                "faker": "lorem.sentence"
+              },
+              "done": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "faker": "date.recent"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "done",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "pattern": [
+        "user",
+        "*"
+      ],
+      "type": "ApiResponse<User>",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/ApiResponse%3CUser%3E",
+        "definitions": {
+          "ApiResponse<User>": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/User"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data",
+              "meta"
+            ],
+            "additionalProperties": false,
+            "description": "Generic envelope, as most real APIs have."
+          },
+          "User": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number",
+                "faker": "number.int({min: 1, max: 9999})"
+              },
+              "name": {
+                "type": "string",
+                "faker": "person.fullName"
+              },
+              "email": {
+                "type": "string",
+                "faker": "internet.email"
+              },
+              "avatarUrl": {
+                "type": "string",
+                "faker": "image.avatar"
+              },
+              "createdAt": {
+                "type": "string",
+                "faker": "date.past"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "email",
+              "avatarUrl",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "pattern": [
+        "settings"
+      ],
+      "type": "ApiResponse<Settings>",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/ApiResponse%3CSettings%3E",
+        "definitions": {
+          "ApiResponse<Settings>": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/Settings"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data",
+              "meta"
+            ],
+            "additionalProperties": false,
+            "description": "Generic envelope, as most real APIs have."
+          },
+          "Settings": {
+            "type": "object",
+            "properties": {
+              "theme": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "dark",
+                  "system"
+                ]
+              },
+              "flags": {
+                "description": "Intentional `any`: feature flags arrive untyped from the server."
+              }
+            },
+            "required": [
+              "theme",
+              "flags"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "pattern": [
+        "thread",
+        "*"
+      ],
+      "type": "ApiResponse<Comment>",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/ApiResponse%3CComment%3E",
+        "definitions": {
+          "ApiResponse<Comment>": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/Comment"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data",
+              "meta"
+            ],
+            "additionalProperties": false,
+            "description": "Generic envelope, as most real APIs have."
+          },
+          "Comment": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "author": {
+                "type": "string",
+                "faker": "internet.userName"
+              },
+              "body": {
+                "type": "string",
+                "faker": "lorem.paragraph"
+              },
+              "createdAt": {
+                "type": "string",
+                "faker": "date.recent"
+              },
+              "replies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Comment"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "author",
+              "body",
+              "createdAt",
+              "replies"
+            ],
+            "additionalProperties": false,
+            "description": "Self-recursive: a comment thread of unbounded depth."
+          }
+        }
+      }
+    },
+    {
+      "pattern": [
+        "notifications"
+      ],
+      "type": "ApiResponse<Notification[]>",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-example_api.ts-2202-2533-example_api.ts-0-46361999362925%5B%5D%3E",
+        "definitions": {
+          "ApiResponse<def-alias-example_api.ts-2202-2533-example_api.ts-0-46361999362925[]>": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Notification"
+                }
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  },
+                  "durationMs": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data",
+              "meta"
+            ],
+            "additionalProperties": false,
+            "description": "Generic envelope, as most real APIs have."
+          },
+          "Notification": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "mention"
+                  },
+                  "id": {
+                    "type": "number"
+                  },
+                  "from": {
+                    "type": "string"
+                  },
+                  "commentId": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "from",
+                  "commentId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "system"
+                  },
+                  "id": {
+                    "type": "number"
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": [
+                      "info",
+                      "warn"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "severity",
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "digest"
+                  },
+                  "id": {
+                    "type": "number"
+                  },
+                  "period": {
+                    "type": "string",
+                    "enum": [
+                      "daily",
+                      "weekly"
+                    ]
+                  },
+                  "count": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "period",
+                  "count"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "Discriminated union: the generator must be told which arm to produce."
+          }
+        }
+      }
+    }
+  ]
+}

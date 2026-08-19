@@ -5,6 +5,7 @@ import type { QuerySeedEventMap } from '../shared/types'
 import { PLUGIN_ID } from '../shared/types'
 import type { FixtureSource } from './fixtures'
 import { loadFixtures } from './fixtures'
+import { parseSchemasFile } from '../shared/schema'
 import type { QueryClientLike } from './instrument'
 import { instrumentClient } from './instrument'
 import { captureFrames } from './origin'
@@ -25,6 +26,17 @@ export type QuerySeederOptions = {
    * literal here because Metro resolves `require.context` statically.
    */
   fixtures?: FixtureSource
+  /**
+   * Schemas extracted from your TypeScript types by `npx query-seed extract`,
+   * so the panel can generate data rather than making you type it:
+   *
+   * ```ts
+   * useQuerySeeder(queryClient, {
+   *   schemas: require('./query-seed.schemas.json'),
+   * })
+   * ```
+   */
+  schemas?: unknown
   /** Escape hatch. The plugin is already inert outside `__DEV__`. */
   enabled?: boolean
 }
@@ -54,7 +66,7 @@ export function useQuerySeeder(
   queryClient: QueryClientLike | null | undefined,
   options: QuerySeederOptions = {},
 ): void {
-  const { fixtures, enabled = true } = options
+  const { fixtures, schemas, enabled = true } = options
   const active = enabled && isDev() && Boolean(queryClient)
 
   const sessionRef = useRef<Session | null>(null)
@@ -78,13 +90,26 @@ export function useQuerySeeder(
     // already in the bundle, so this is a parse, but it is a parse over every
     // fixture in the directory.
     if (fixtures) session.setFixtures(loadFixtures(fixtures))
+    if (schemas) {
+      try {
+        session.setSchemas(parseSchemasFile(schemas).entries)
+      } catch (error) {
+        // A stale or hand-broken schemas file must not take the panel down with
+        // it — everything except generation still works.
+        console.warn(
+          `[query-seed] ignoring schemas: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+    }
 
     return () => {
       dispose()
       session.dispose()
       if (sessionRef.current === session) sessionRef.current = null
     }
-  }, [active, queryClient, fixtures])
+  }, [active, queryClient, fixtures, schemas])
 
   // ---- bridge wiring (re-runs whenever the panel attaches or detaches) ----
   useEffect(() => {
@@ -123,6 +148,12 @@ export function useQuerySeeder(
         devToolsClient.send('seed:fixture-data', {
           id,
           data: session.readFixture(id),
+        })
+      }),
+      devToolsClient.onMessage('seed:read-schema', ({ pattern }) => {
+        devToolsClient.send('seed:schema', {
+          pattern,
+          schema: session.schemaFor(pattern),
         })
       }),
     ]

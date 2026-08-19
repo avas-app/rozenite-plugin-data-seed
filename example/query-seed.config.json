@@ -1,0 +1,12 @@
+{
+  "tsconfig": "./tsconfig.json",
+  "source": "./api.ts",
+  "out": "./query-seed.schemas.json",
+  "queries": [
+    { "key": ["todos"], "type": "ApiResponse<Todo[]>" },
+    { "key": ["user", "*"], "type": "ApiResponse<User>" },
+    { "key": ["settings"], "type": "ApiResponse<Settings>" },
+    { "key": ["thread", "*"], "type": "ApiResponse<Comment>" },
+    { "key": ["notifications"], "type": "ApiResponse<Notification[]>" }
+  ]
+}

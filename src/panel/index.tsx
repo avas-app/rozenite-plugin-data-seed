@@ -9,7 +9,12 @@ import {
 import { Loader2, PlugZap } from 'lucide-react'
 
 import { sameQueryKey } from '../shared/fixture'
+import type { GenerateWarning } from '../shared/generate'
+import { generate as generateValue } from '../shared/generate'
+import { findByPattern } from '../shared/schema'
+import type { SchemaDocument } from '../shared/schema'
 import type { BundledFixture } from '../shared/types'
+import { GenerateBar } from './components/GenerateBar'
 import { FixtureList } from './components/FixtureList'
 import { QueryList } from './components/QueryList'
 import {
@@ -38,6 +43,12 @@ export default function QuerySeedPanel() {
   // a cache read arriving over the bridge, and a fixture read from disk.
   const [text, setText] = useState('')
   const [filledFor, setFilledFor] = useState<string | null>(null)
+  const [itemCount, setItemCount] = useState(3)
+  const [variant, setVariant] = useState<number | null>(null)
+  const [warnings, setWarnings] = useState<GenerateWarning[]>([])
+  // Bumped on every press so repeated Generates give different data, while any
+  // single seed still reproduces its value exactly.
+  const [roll, setRoll] = useState(0)
 
   const incoming =
     target?.queryHash && state.editorData?.queryHash === target.queryHash
@@ -79,6 +90,7 @@ export default function QuerySeedPanel() {
       setTarget({ queryKey: query.queryKey, queryHash, source: 'query' })
       setText('')
       setFilledFor(null)
+      setWarnings([])
       // Row previews are clipped, so the editor has to ask for the real value.
       actions.readData(queryHash)
     },
@@ -99,10 +111,40 @@ export default function QuerySeedPanel() {
       })
       setText('')
       setFilledFor(null)
+      setWarnings([])
       actions.readFixture(fixture.id)
     },
     [actions],
   )
+
+  /** The schema summary covering the current key, if any. */
+  const schemaSummary = useMemo(
+    () => (target ? findByPattern(state.schemas, target.queryKey) : null),
+    [state.schemas, target],
+  )
+
+  // Schemas are fetched on demand, so ask as soon as one is known to exist.
+  useEffect(() => {
+    if (schemaSummary) actions.readSchema(schemaSummary.pattern)
+  }, [actions, schemaSummary])
+
+  const schemaDocument = useMemo(() => {
+    if (!schemaSummary || !state.schema) return null
+    if (!sameQueryKey(state.schema.pattern, schemaSummary.pattern)) return null
+    return (state.schema.schema as SchemaDocument | null) ?? null
+  }, [schemaSummary, state.schema])
+
+  const runGenerate = useCallback(() => {
+    if (!schemaDocument || !target) return
+    const result = generateValue(schemaDocument, {
+      seed: `${JSON.stringify(target.queryKey)}:${roll}`,
+      arrayLength: itemCount,
+      variant: variant ?? undefined,
+    })
+    setText(JSON.stringify(result.value, null, 2))
+    setWarnings(result.warnings)
+    setRoll((current) => current + 1)
+  }, [itemCount, roll, schemaDocument, target, variant])
 
   // Resolved by key rather than hash: a fixture can target a query that has
   // never been fetched, so it has no hash to match on.
@@ -203,6 +245,20 @@ useQuerySeeder(queryClient)`}
 
         <SeedEditor
           canSaveFixture={fixtures.state.supported}
+          generate={
+            schemaSummary ? (
+              <GenerateBar
+                itemCount={itemCount}
+                loading={!schemaDocument}
+                onGenerate={runGenerate}
+                onItemCountChange={setItemCount}
+                onVariantChange={setVariant}
+                typeName={schemaSummary.type}
+                variant={variant}
+                warnings={warnings}
+              />
+            ) : null
+          }
           intercept={state.capabilities.intercept}
           loading={loading}
           onApply={actions.apply}

@@ -1,7 +1,7 @@
 {
   "name": "@avasapp/rozenite-plugin-query-seed",
   "version": "0.1.0",
-  "description": "Seed fake data into a TanStack Query cache from React Native DevTools — without touching your source.",
+  "description": "Seed fake data into a TanStack Query cache from React Native DevTools \u2014 without touching your source.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/avas-app/rozenite-plugin-query-seed#readme",
@@ -32,6 +32,7 @@
   },
   "files": [
     "dist",
+    "bin",
     "src/shared"
   ],
   "keywords": [
@@ -70,11 +71,21 @@
     "react-native-web": "^0.21.2",
     "rozenite": "^2.1.0",
     "tailwindcss": "^4.2.2",
+    "ts-json-schema-generator": "^2.9.0",
     "typescript": "~5.9.3",
     "vite": "^7.3.1"
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "ts-json-schema-generator": ">=2"
+  },
+  "bin": {
+    "query-seed": "./bin/query-seed.mjs"
+  },
+  "peerDependenciesMeta": {
+    "ts-json-schema-generator": {
+      "optional": true
+    }
   }
 }

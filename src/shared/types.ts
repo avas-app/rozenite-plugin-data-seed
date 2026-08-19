@@ -105,6 +105,18 @@ export type FixtureProblem = {
   reason: string
 }
 
+/**
+ * A query key pattern that has an extracted schema, without the schema itself.
+ *
+ * Schemas are sent on request rather than in the snapshot for the same reason
+ * query data is: a real app's API surface produces a file far larger than
+ * anything the panel needs at once, and it only ever generates for one query.
+ */
+export type SchemaSummary = {
+  pattern: unknown[]
+  type: string
+}
+
 /** An active seed, as the panel lists it. */
 export type SeedSnapshot = {
   queryHash: string
@@ -122,6 +134,8 @@ export type SeedSnapshot = {
 export type Capabilities = {
   /** A fixtures directory was supplied, so the panel can list bundled fixtures. */
   fixtures: boolean
+  /** Extracted schemas were supplied, so the panel can generate data. */
+  schemas: boolean
   /**
    * `queryClient.defaultQueryOptions` was wrappable, so seeds survive refetch.
    * When false the plugin degrades to one-shot `setQueryData` writes, which the
@@ -142,6 +156,7 @@ export type Snapshot = {
   seeds: SeedSnapshot[]
   fixtures: BundledFixture[]
   fixtureProblems: FixtureProblem[]
+  schemas: SchemaSummary[]
   capabilities: Capabilities
 }
 
@@ -162,6 +177,8 @@ export type QuerySeedEventMap = {
   }
   /** Reply to `seed:read-fixture`. */
   'seed:fixture-data': { id: string; data: SerializedPayload }
+  /** Reply to `seed:read-schema`. `schema` is null if the pattern is unknown. */
+  'seed:schema': { pattern: unknown[]; schema: unknown | null }
 
   // ---- panel -> React Native ----
   'seed:request-snapshot': Record<string, never>
@@ -175,6 +192,7 @@ export type QuerySeedEventMap = {
   'seed:clear-all': Record<string, never>
   'seed:read-data': { queryHash: string }
   'seed:read-fixture': { id: string }
+  'seed:read-schema': { pattern: unknown[] }
 }
 
 /**

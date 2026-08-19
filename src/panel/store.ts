@@ -10,6 +10,7 @@ import type {
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
+  SchemaSummary,
   SourceFrame,
 } from '../shared/types'
 import { PLUGIN_ID } from '../shared/types'
@@ -24,6 +25,7 @@ export type PanelState = {
   /** Fixtures that shipped in the app bundle — the default, setup-free source. */
   fixtures: BundledFixture[]
   fixtureProblems: FixtureProblem[]
+  schemas: SchemaSummary[]
   capabilities: Capabilities
   /**
    * Full data for the query currently open in the editor, fetched on demand.
@@ -33,6 +35,8 @@ export type PanelState = {
   editorData: { queryHash: string; data: SerializedPayload } | null
   /** Full value of the fixture currently open, fetched on demand. */
   fixtureData: { id: string; data: SerializedPayload } | null
+  /** Schema for the query currently open, fetched on demand. */
+  schema: { pattern: unknown[]; schema: unknown | null } | null
 }
 
 const INITIAL: PanelState = {
@@ -42,9 +46,11 @@ const INITIAL: PanelState = {
   seeds: [],
   fixtures: [],
   fixtureProblems: [],
-  capabilities: { intercept: false, fixtures: false },
+  schemas: [],
+  capabilities: { intercept: false, fixtures: false, schemas: false },
   editorData: null,
   fixtureData: null,
+  schema: null,
 }
 
 type Action =
@@ -54,6 +60,7 @@ type Action =
   | { type: 'data'; queryHash: string; data: SerializedPayload }
   | { type: 'fixtures'; fixtures: BundledFixture[]; problems: FixtureProblem[] }
   | { type: 'fixture-data'; id: string; data: SerializedPayload }
+  | { type: 'schema'; pattern: unknown[]; schema: unknown | null }
   | { type: 'clear-editor' }
 
 function reducer(state: PanelState, action: Action): PanelState {
@@ -67,6 +74,7 @@ function reducer(state: PanelState, action: Action): PanelState {
         seeds: action.snapshot.seeds,
         fixtures: action.snapshot.fixtures,
         fixtureProblems: action.snapshot.fixtureProblems,
+        schemas: action.snapshot.schemas,
         capabilities: action.snapshot.capabilities,
       }
     case 'queries':
@@ -86,8 +94,10 @@ function reducer(state: PanelState, action: Action): PanelState {
       }
     case 'fixture-data':
       return { ...state, fixtureData: { id: action.id, data: action.data } }
+    case 'schema':
+      return { ...state, schema: { pattern: action.pattern, schema: action.schema } }
     case 'clear-editor':
-      return { ...state, editorData: null, fixtureData: null }
+      return { ...state, editorData: null, fixtureData: null, schema: null }
     default:
       return state
   }
@@ -97,6 +107,7 @@ export type PanelActions = {
   /** Asks the app for one query's full data, to prefill the editor. */
   readData: (queryHash: string) => void
   readFixture: (id: string) => void
+  readSchema: (pattern: unknown[]) => void
   apply: (queryKey: unknown[], data: unknown) => void
   clear: (queryHash: string) => void
   clearAll: () => void
@@ -138,6 +149,9 @@ export function useQuerySeedPanel(): {
       client.onMessage('seed:fixture-data', ({ id, data }) =>
         dispatch({ type: 'fixture-data', id, data }),
       ),
+      client.onMessage('seed:schema', ({ pattern, schema }) =>
+        dispatch({ type: 'schema', pattern, schema }),
+      ),
     ]
 
     // The app may have been running long before this panel opened.
@@ -150,6 +164,7 @@ export function useQuerySeedPanel(): {
     () => ({
       readData: (queryHash) => client?.send('seed:read-data', { queryHash }),
       readFixture: (id) => client?.send('seed:read-fixture', { id }),
+      readSchema: (pattern) => client?.send('seed:read-schema', { pattern }),
       apply: (queryKey, data) => client?.send('seed:apply', { queryKey, data }),
       clear: (queryHash) => client?.send('seed:clear', { queryHash }),
       clearAll: () => client?.send('seed:clear-all', {}),

@@ -64,6 +64,9 @@ function Root() {
   // so there is nothing to configure and no folder to point at.
   useQuerySeeder(queryClient, {
     fixtures: require.context('./seeds', false, /\.json$/),
+    // Written by `npx query-seed extract` from the types in ./api.ts, so the
+    // panel can generate data instead of making you type it.
+    schemas: require('./query-seed.schemas.json'),
   })
 
   return (
