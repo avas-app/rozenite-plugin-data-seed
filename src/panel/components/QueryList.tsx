@@ -41,7 +41,7 @@ export function QueryList({
     : queries
 
   return (
-    <aside className="flex w-[22rem] shrink-0 flex-col border-r border-border">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-border p-2">
         <Input
           onChange={(event) => onQueryChange(event.target.value)}
@@ -108,6 +108,6 @@ export function QueryList({
           </ul>
         )}
       </div>
-    </aside>
+    </div>
   )
 }

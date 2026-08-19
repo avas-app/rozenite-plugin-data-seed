@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   EmptyState,
@@ -8,31 +8,84 @@ import {
 } from '@rozenite/ui'
 import { Loader2, PlugZap } from 'lucide-react'
 
+import type { FixtureSummary } from '../shared/fixture'
+import { sameQueryKey } from '../shared/fixture'
+import { FixtureList } from './components/FixtureList'
 import { QueryList } from './components/QueryList'
-import { SeedEditor } from './components/SeedEditor'
+import {
+  SeedEditor,
+  toEditableText,
+  type EditorTarget,
+} from './components/SeedEditor'
+import { useFixtures } from './fixtures/use-fixtures'
 import { useQuerySeedPanel } from './store'
 import './globals.css'
 
 const SUBTITLE = 'Push fake data into the TanStack Query cache and make it stick.'
 
+type Tab = 'queries' | 'fixtures'
+
 export default function QuerySeedPanel() {
   const { state, actions, bridgeReady } = useQuerySeedPanel()
+  const fixtures = useFixtures()
 
-  const [selected, setSelected] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('queries')
   const [filter, setFilter] = useState('')
+  const [target, setTarget] = useState<EditorTarget | null>(null)
+  // The editor is controlled from here because two independent sources fill it:
+  // a cache read arriving over the bridge, and a fixture read from disk.
+  const [text, setText] = useState('')
+  const [filledFor, setFilledFor] = useState<string | null>(null)
 
-  const selectedQuery = useMemo(
-    () => state.queries.find((q) => q.queryHash === selected) ?? null,
-    [state.queries, selected],
-  )
+  const incoming =
+    target?.queryHash && state.editorData?.queryHash === target.queryHash
+      ? state.editorData
+      : null
 
-  const select = useCallback(
+  useEffect(() => {
+    if (!incoming || filledFor === incoming.queryHash) return
+    setText(toEditableText(incoming.data))
+    setFilledFor(incoming.queryHash)
+  }, [incoming, filledFor])
+
+  const selectQuery = useCallback(
     (queryHash: string) => {
-      setSelected(queryHash)
+      const query = state.queries.find((q) => q.queryHash === queryHash)
+      if (!query) return
+      setTarget({ queryKey: query.queryKey, queryHash, source: 'query' })
+      setText('')
+      setFilledFor(null)
       // Row previews are clipped, so the editor has to ask for the real value.
       actions.readData(queryHash)
     },
-    [actions],
+    [actions, state.queries],
+  )
+
+  const openFixture = useCallback(
+    async (summary: FixtureSummary) => {
+      const fixture = await fixtures.actions.load(summary.fileName)
+      if (!fixture) return
+      setTarget({
+        queryKey: fixture.queryKey,
+        queryHash: null,
+        source: 'fixture',
+        fixtureName: fixture.name,
+      })
+      setText(JSON.stringify(fixture.data, null, 2))
+      setFilledFor(summary.fileName)
+    },
+    [fixtures.actions],
+  )
+
+  // Resolved by key rather than hash: a fixture can target a query that has
+  // never been fetched, so it has no hash to match on.
+  const activeSeed = useMemo(
+    () =>
+      target
+        ? (state.seeds.find((seed) => sameQueryKey(seed.queryKey, target.queryKey)) ??
+          null)
+        : null,
+    [state.seeds, target],
   )
 
   if (!bridgeReady) {
@@ -63,6 +116,8 @@ useQuerySeeder(queryClient)`}
     )
   }
 
+  const loading = target?.source === 'query' && filledFor !== target.queryHash
+
   return (
     <Shell>
       <Header>
@@ -79,22 +134,86 @@ useQuerySeeder(queryClient)`}
       </Header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <QueryList
-          onQueryChange={setFilter}
-          onSelect={select}
-          queries={state.queries}
-          query={filter}
-          selected={selected}
-        />
+        <aside className="flex w-[22rem] shrink-0 flex-col border-r border-border">
+          <div className="flex shrink-0 gap-1 border-b border-border p-1">
+            <TabButton
+              active={tab === 'queries'}
+              count={state.queries.length}
+              label="Queries"
+              onClick={() => setTab('queries')}
+            />
+            <TabButton
+              active={tab === 'fixtures'}
+              count={fixtures.state.ready ? fixtures.state.fixtures.length : null}
+              label="Fixtures"
+              onClick={() => setTab('fixtures')}
+            />
+          </div>
+
+          {tab === 'queries' ? (
+            <QueryList
+              onQueryChange={setFilter}
+              onSelect={selectQuery}
+              queries={state.queries}
+              query={filter}
+              selected={target?.queryHash ?? null}
+            />
+          ) : (
+            <FixtureList
+              actions={fixtures.actions}
+              activeQueryKey={target ? JSON.stringify(target.queryKey) : null}
+              onOpen={(summary) => void openFixture(summary)}
+              state={fixtures.state}
+            />
+          )}
+        </aside>
+
         <SeedEditor
-          editorData={state.editorData}
+          canSaveFixture={fixtures.state.ready}
           intercept={state.capabilities.intercept}
+          loading={loading}
           onApply={actions.apply}
-          onClear={actions.clear}
-          query={selectedQuery}
+          onChange={setText}
+          onClear={() => activeSeed && actions.clear(activeSeed.queryHash)}
+          onSaveFixture={(name, queryKey, data) =>
+            void fixtures.actions.save(name, queryKey, data)
+          }
+          seeded={Boolean(activeSeed)}
+          target={target}
+          truncated={Boolean(incoming?.data.truncated)}
+          value={text}
         />
       </div>
     </Shell>
+  )
+}
+
+function TabButton({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  count: number | null
+  onClick: () => void
+}) {
+  return (
+    <button
+      className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
+        active
+          ? 'bg-muted text-foreground'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+      {count !== null ? (
+        <span className="text-[11px] text-muted-foreground">{count}</span>
+      ) : null}
+    </button>
   )
 }
 

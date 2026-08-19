@@ -73,12 +73,45 @@ Rows are annotated with observer count: `inactive` means nothing on screen is
 subscribed, which is worth knowing before you seed it and wonder why nothing
 changed.
 
+## Fixtures
+
+A seed you have to retype is a seed you will not reuse. Switch the left rail to
+**Fixtures**, point it at a folder once (`seeds/` in your repo is a good
+default), and every seed can be saved under a name and restored in one click.
+
+Fixtures are plain, diff-friendly JSON — commit them and the whole team gets
+them:
+
+```json
+{
+  "version": 1,
+  "name": "cart with 50 items",
+  "queryKey": ["cart", { "userId": 7 }],
+  "savedAt": "2026-08-19T10:00:00.000Z",
+  "data": { "items": [] }
+}
+```
+
+A fixture carries its own `queryKey`, so restoring one seeds the right query
+even if that screen has never been opened and the query is not in the cache yet.
+Hand-written fixtures work too — `queryKey` and `data` are the only required
+fields.
+
+The folder is reached through the browser's File System Access API, which means
+no extra install and no config, but two things follow from it:
+
+- **Chrome only.** Fine in practice, since React Native DevTools *is* Chrome.
+- **Access needs re-granting after a browser restart.** Chrome downgrades the
+  saved permission to `prompt`, so the panel shows a *Reconnect folder* button
+  rather than failing silently.
+
 ## Limitations
 
 - **v1 is raw JSON.** You paste a value; there is no generation from types yet.
   See [Roadmap](#roadmap).
-- **Seeds are session-scoped.** They live in the app's memory and are gone on
-  reload. Persisting them as committed fixtures is the next milestone.
+- **Fixtures are not scriptable yet.** Because the store runs in the browser,
+  CI and E2E runs cannot load fixtures. The store sits behind a `FixtureStore`
+  interface so a CLI-backed implementation can be added without touching the UI.
 - **`queryFn`-level only.** This seeds what a query *resolves to*. It does not
   mock mutations, sequence responses, or simulate latency — that is a mock
   server's job, and [MSW](https://mswjs.io) already does it well.
@@ -92,6 +125,8 @@ changed.
    (`/** @faker person.fullName */`), and generate from that. Annotations live
    next to the field deliberately: a sidecar keyed by type path silently rots
    the moment someone renames something.
+4. **Headless access** — an agent domain plus a CLI-backed fixture store, so a
+   test run can seed a known cache state with no DevTools window open.
 
 ## Example app
 
