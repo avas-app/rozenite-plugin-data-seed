@@ -89,7 +89,9 @@ export function useFixtures(): {
   const actions = useMemo<FixturesActions>(
     () => ({
       connect: async () => {
-        const picked = await run(() => pickFixtureDirectory())
+        // Re-picking starts where the current folder is, so "change" lands next
+        // to the old choice rather than back at square one.
+        const picked = await run(() => pickFixtureDirectory(handle ?? undefined))
         if (!picked) return false
         setHandle(picked)
         setGranted(true)

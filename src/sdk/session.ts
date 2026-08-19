@@ -6,6 +6,7 @@ import type {
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
+  SourceFrame,
 } from '../shared/types'
 import type { LoadedFixtures } from './fixtures'
 import { approximateSize, serialize } from './serialize'
@@ -59,6 +60,7 @@ export class Session {
   #sink: SessionSink | null = null
   #capabilities: Capabilities = { intercept: false, fixtures: false }
   #fixtures: LoadedFixtures = { summaries: [], problems: [], byId: new Map() }
+  #frames: SourceFrame[] = []
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #disposed = false
 
@@ -72,6 +74,10 @@ export class Session {
   attachDriver(driver: SeedDriver | null, capabilities: Partial<Capabilities>): void {
     this.#driver = driver
     this.#capabilities = { ...this.#capabilities, ...capabilities }
+  }
+
+  setFrames(frames: SourceFrame[]): void {
+    this.#frames = frames
   }
 
   setFixtures(fixtures: LoadedFixtures): void {
@@ -166,6 +172,7 @@ export class Session {
 
   snapshot(): Snapshot {
     return {
+      frames: this.#frames,
       queries: this.#driver?.listQueries() ?? [],
       seeds: this.seedList(),
       fixtures: this.#fixtures.summaries,

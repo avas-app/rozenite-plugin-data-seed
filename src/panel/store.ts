@@ -10,12 +10,15 @@ import type {
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
+  SourceFrame,
 } from '../shared/types'
 import { PLUGIN_ID } from '../shared/types'
 
 export type PanelState = {
   /** True once a snapshot has arrived — distinguishes "no app" from "empty cache". */
   hydrated: boolean
+  /** Bundle-coordinate frames, used to locate the project on disk. */
+  frames: SourceFrame[]
   queries: QuerySnapshot[]
   seeds: SeedSnapshot[]
   /** Fixtures that shipped in the app bundle — the default, setup-free source. */
@@ -34,6 +37,7 @@ export type PanelState = {
 
 const INITIAL: PanelState = {
   hydrated: false,
+  frames: [],
   queries: [],
   seeds: [],
   fixtures: [],
@@ -58,6 +62,7 @@ function reducer(state: PanelState, action: Action): PanelState {
       return {
         ...state,
         hydrated: true,
+        frames: action.snapshot.frames,
         queries: action.snapshot.queries,
         seeds: action.snapshot.seeds,
         fixtures: action.snapshot.fixtures,

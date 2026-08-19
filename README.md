@@ -128,6 +128,14 @@ Chrome's directory picker, remembered afterwards. Two consequences:
   saved permission to `prompt`, so the panel shows a *Reconnect* button rather
   than failing silently.
 
+The picker cannot be pre-navigated to your repo — `showDirectoryPicker` takes a
+well-known folder or a handle, never a path, because letting a page steer the
+dialog would leak your filesystem layout. Two things soften that: the picker has
+a stable id, so Chrome reopens wherever it was last used, and the panel shows
+your project's absolute path next to the button, which pastes into the dialog
+with ⇧⌘G. The path is resolved through Metro's `/symbolicate`; if that fails, no
+hint is shown rather than a wrong one.
+
 You can also just write the file yourself. Nothing about a fixture requires the
 panel to have created it.
 

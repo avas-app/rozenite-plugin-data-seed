@@ -17,6 +17,7 @@ import {
   toEditableText,
   type EditorTarget,
 } from './components/SeedEditor'
+import { useProjectRoot } from './fixtures/project-root'
 import { useFixtures } from './fixtures/use-fixtures'
 import { useQuerySeedPanel } from './store'
 import './globals.css'
@@ -28,6 +29,7 @@ type Tab = 'queries' | 'fixtures'
 export default function QuerySeedPanel() {
   const { state, actions, bridgeReady } = useQuerySeedPanel()
   const fixtures = useFixtures()
+  const projectRoot = useProjectRoot(state.frames)
 
   const [tab, setTab] = useState<Tab>('queries')
   const [filter, setFilter] = useState('')
@@ -191,6 +193,7 @@ useQuerySeeder(queryClient)`}
               fixtures={state.fixtures}
               onOpen={openFixture}
               problems={state.fixtureProblems}
+              projectRoot={projectRoot}
               selectedId={target?.fixtureId ?? null}
               writeActions={fixtures.actions}
               writeState={fixtures.state}

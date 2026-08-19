@@ -85,6 +85,20 @@ export type BundledFixture = {
   byteLength: number
 }
 
+/**
+ * One frame of a stack captured on the device, in bundle coordinates.
+ *
+ * Only useful in combination with Metro's `/symbolicate`, which maps it back to
+ * a real source file. The panel uses that to show where the project lives, so
+ * the folder picker — which cannot be pre-navigated — at least has a path the
+ * user can paste.
+ */
+export type SourceFrame = {
+  file: string
+  lineNumber: number
+  column: number
+}
+
 /** A fixture file that could not be read, surfaced instead of silently hidden. */
 export type FixtureProblem = {
   id: string
@@ -122,6 +136,8 @@ export type Capabilities = {
  * queries that happened to change since it attached.
  */
 export type Snapshot = {
+  /** Bundle-coordinate frames, for locating the project on disk. May be empty. */
+  frames: SourceFrame[]
   queries: QuerySnapshot[]
   seeds: SeedSnapshot[]
   fixtures: BundledFixture[]

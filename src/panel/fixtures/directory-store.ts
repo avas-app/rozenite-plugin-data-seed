@@ -53,11 +53,22 @@ export function isFileSystemAccessSupported(): boolean {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
 }
 
+/** Chrome keys its remembered picker location on this. */
+const PICKER_ID = 'rozenite-query-seed-fixtures'
+
 /**
  * Prompts for a directory. Must be called from a user gesture — the picker is
  * gesture-gated, and so is the permission prompt it implies.
+ *
+ * The picker cannot be pointed at a path: `startIn` accepts a well-known folder
+ * or a handle, never a string, because letting a page pre-navigate the dialog
+ * would leak the user's filesystem layout. What *can* be done is give the picker
+ * a stable `id`, which Chrome uses to reopen wherever it was last used — so only
+ * the very first pick on a machine starts somewhere unhelpful.
  */
-export async function pickFixtureDirectory(): Promise<DirectoryHandleLike> {
+export async function pickFixtureDirectory(
+  startIn?: DirectoryHandleLike,
+): Promise<DirectoryHandleLike> {
   if (!isFileSystemAccessSupported()) {
     throw new FixtureStoreUnavailableError(
       'This browser cannot open a folder. React Native DevTools runs on Chrome, where it works.',
@@ -65,10 +76,14 @@ export async function pickFixtureDirectory(): Promise<DirectoryHandleLike> {
   }
   const picker = (
     window as unknown as {
-      showDirectoryPicker: (o?: { mode?: 'read' | 'readwrite' }) => Promise<DirectoryHandleLike>
+      showDirectoryPicker: (o?: {
+        mode?: 'read' | 'readwrite'
+        id?: string
+        startIn?: DirectoryHandleLike
+      }) => Promise<DirectoryHandleLike>
     }
   ).showDirectoryPicker
-  const handle = await picker({ mode: 'readwrite' })
+  const handle = await picker({ mode: 'readwrite', id: PICKER_ID, startIn })
   await idbSet(HANDLE_KEY, handle)
   return handle
 }

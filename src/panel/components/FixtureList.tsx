@@ -22,6 +22,7 @@ export function FixtureList({
   onOpen,
   writeState,
   writeActions,
+  projectRoot,
 }: {
   fixtures: BundledFixture[]
   problems: FixtureProblem[]
@@ -31,6 +32,8 @@ export function FixtureList({
   onOpen: (fixture: BundledFixture) => void
   writeState: FixturesState
   writeActions: FixturesActions
+  /** Absolute project path, shown so it can be pasted into the picker. */
+  projectRoot: string | null
 }) {
   if (!capable) {
     return (
@@ -101,7 +104,11 @@ export function FixtureList({
         )}
       </div>
 
-      <WriteFooter actions={writeActions} state={writeState} />
+      <WriteFooter
+        actions={writeActions}
+        projectRoot={projectRoot}
+        state={writeState}
+      />
     </div>
   )
 }
@@ -116,9 +123,11 @@ export function FixtureList({
 function WriteFooter({
   state,
   actions,
+  projectRoot,
 }: {
   state: FixturesState
   actions: FixturesActions
+  projectRoot: string | null
 }) {
   if (!state.supported) {
     return (
@@ -143,14 +152,23 @@ function WriteFooter({
 
   if (!state.ready) {
     return (
-      <div className="flex items-center gap-2 border-t border-border px-3 py-2">
-        <span className="min-w-0 flex-1 text-[11px] text-muted-foreground">
-          Choose a folder to save new fixtures
-        </span>
-        <Button onClick={() => void actions.connect()} size="compact" variant="outline">
-          <FolderOpen className="size-3.5" />
-          Choose
-        </Button>
+      <div className="flex flex-col gap-1.5 border-t border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-[11px] text-muted-foreground">
+            Choose a folder to save new fixtures
+          </span>
+          <Button onClick={() => void actions.connect()} size="compact" variant="outline">
+            <FolderOpen className="size-3.5" />
+            Choose
+          </Button>
+        </div>
+        {/* The picker cannot be pre-navigated, so the path is shown instead —
+            ⇧⌘G in the macOS file dialog takes a pasted path directly. */}
+        {projectRoot ? (
+          <code className="block select-all truncate font-mono text-[11px] text-muted-foreground">
+            {projectRoot} <span className="opacity-60">— paste with ⇧⌘G</span>
+          </code>
+        ) : null}
       </div>
     )
   }

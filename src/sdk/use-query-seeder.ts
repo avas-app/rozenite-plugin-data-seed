@@ -7,6 +7,7 @@ import type { FixtureSource } from './fixtures'
 import { loadFixtures } from './fixtures'
 import type { QueryClientLike } from './instrument'
 import { instrumentClient } from './instrument'
+import { captureFrames } from './origin'
 import { Session } from './session'
 
 export type QuerySeederOptions = {
@@ -69,6 +70,10 @@ export function useQuerySeeder(
     const session = new Session()
     sessionRef.current = session
     const dispose = instrumentClient(queryClient, session)
+    // Captured here rather than at module scope: this runs inside the app's own
+    // call stack, so the frames above us belong to the consuming project — which
+    // is exactly what the panel needs to locate it on disk.
+    session.setFrames(captureFrames())
     // Loaded once per session rather than per panel connection: the modules are
     // already in the bundle, so this is a parse, but it is a parse over every
     // fixture in the directory.
