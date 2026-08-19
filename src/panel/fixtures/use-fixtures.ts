@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { Fixture, FixtureSummary } from '../../shared/fixture'
 import { createFixture } from '../../shared/fixture'
 import {
   createDirectoryStore,
@@ -13,25 +12,29 @@ import {
 
 type Handle = Awaited<ReturnType<typeof pickFixtureDirectory>>
 
+/**
+ * Write access to the fixtures folder.
+ *
+ * Reading is deliberately not here — bundled fixtures arrive over the Rozenite
+ * bridge from the app, which needs no permission and works for anyone who
+ * clones the repo. This hook covers only the one thing the bundle cannot do,
+ * which is create a new file.
+ */
 export type FixturesState = {
   supported: boolean
-  /** A folder was chosen previously but access has lapsed and needs a click. */
+  /** A folder was chosen before but access lapsed and needs a click. */
   needsReconnect: boolean
   ready: boolean
   label: string | null
-  fixtures: FixtureSummary[]
   error: string | null
   busy: boolean
 }
 
 export type FixturesActions = {
-  connect: () => Promise<void>
+  connect: () => Promise<boolean>
   reconnect: () => Promise<void>
   forget: () => Promise<void>
-  refresh: () => Promise<void>
   save: (name: string, queryKey: unknown[], data: unknown) => Promise<void>
-  load: (fileName: string) => Promise<Fixture | null>
-  remove: (fileName: string) => Promise<void>
 }
 
 export function useFixtures(): {
@@ -42,7 +45,6 @@ export function useFixtures(): {
 
   const [handle, setHandle] = useState<Handle | null>(null)
   const [granted, setGranted] = useState(false)
-  const [fixtures, setFixtures] = useState<FixtureSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -50,16 +52,6 @@ export function useFixtures(): {
     () => createDirectoryStore(handle, granted),
     [handle, granted],
   )
-
-  const refresh = useCallback(async () => {
-    if (!store.ready) return
-    try {
-      setFixtures(await store.list())
-      setError(null)
-    } catch (cause) {
-      setError(describe(cause))
-    }
-  }, [store])
 
   // Re-attach to a previously chosen folder. Silent by design: a permission
   // prompt on panel open, before the user has asked for anything, reads as the
@@ -78,19 +70,17 @@ export function useFixtures(): {
     }
   }, [supported])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  const run = useCallback(async (work: () => Promise<void>) => {
+  const run = useCallback(async <T,>(work: () => Promise<T>): Promise<T | null> => {
     setBusy(true)
     try {
-      await work()
+      const result = await work()
       setError(null)
+      return result
     } catch (cause) {
       // An abort is the user closing the folder picker, which is a decision,
       // not a failure — surfacing it as an error would be noise.
       if (!isAbort(cause)) setError(describe(cause))
+      return null
     } finally {
       setBusy(false)
     }
@@ -98,53 +88,33 @@ export function useFixtures(): {
 
   const actions = useMemo<FixturesActions>(
     () => ({
-      connect: () =>
-        run(async () => {
-          const picked = await pickFixtureDirectory()
-          setHandle(picked)
-          setGranted(true)
-        }),
-
-      reconnect: () =>
-        run(async () => {
-          if (!handle) return
-          setGranted(await ensureAccess(handle, true))
-        }),
-
-      forget: () =>
-        run(async () => {
-          await forgetSavedDirectory()
-          setHandle(null)
-          setGranted(false)
-          setFixtures([])
-        }),
-
-      refresh,
-
-      save: (name, queryKey, data) =>
-        run(async () => {
-          await store.write(
-            createFixture(name, queryKey, data, new Date().toISOString()),
-          )
-          setFixtures(await store.list())
-        }),
-
-      load: async (fileName) => {
-        try {
-          return await store.read(fileName)
-        } catch (cause) {
-          setError(describe(cause))
-          return null
-        }
+      connect: async () => {
+        const picked = await run(() => pickFixtureDirectory())
+        if (!picked) return false
+        setHandle(picked)
+        setGranted(true)
+        return true
       },
 
-      remove: (fileName) =>
-        run(async () => {
-          await store.remove(fileName)
-          setFixtures(await store.list())
-        }),
+      reconnect: async () => {
+        if (!handle) return
+        const ok = await run(() => ensureAccess(handle, true))
+        setGranted(Boolean(ok))
+      },
+
+      forget: async () => {
+        await run(() => forgetSavedDirectory())
+        setHandle(null)
+        setGranted(false)
+      },
+
+      save: async (name, queryKey, data) => {
+        await run(() =>
+          store.write(createFixture(name, queryKey, data, new Date().toISOString())),
+        )
+      },
     }),
-    [handle, refresh, run, store],
+    [handle, run, store],
   )
 
   return {
@@ -153,7 +123,6 @@ export function useFixtures(): {
       needsReconnect: Boolean(handle) && !granted,
       ready: store.ready,
       label: store.label,
-      fixtures,
       error,
       busy,
     },

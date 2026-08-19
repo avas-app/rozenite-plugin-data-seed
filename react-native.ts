@@ -11,8 +11,11 @@
 
 export { useQuerySeeder } from './src/sdk/use-query-seeder'
 export type { QuerySeederOptions } from './src/sdk/use-query-seeder'
+export type { FixtureContext, FixtureSource } from './src/sdk/fixtures'
 export type { QueryClientLike } from './src/sdk/instrument'
+export type { Fixture, FixtureSummary } from './src/shared/fixture'
 export type {
+  BundledFixture,
   Capabilities,
   QuerySnapshot,
   SeedSnapshot,

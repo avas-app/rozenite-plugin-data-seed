@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "todos \u2014 empty state",
+  "queryKey": [
+    "todos"
+  ],
+  "savedAt": "2026-08-19T10:00:00.000Z",
+  "data": {
+    "data": [],
+    "meta": {
+      "requestId": "req_fixture",
+      "durationMs": 0
+    }
+  }
+}

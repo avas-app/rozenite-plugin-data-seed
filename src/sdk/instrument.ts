@@ -105,7 +105,7 @@ export function instrumentClient(
   session: Session,
 ): () => void {
   const disposers: Array<() => void> = []
-  const capabilities: Capabilities = { intercept: false }
+  const capabilities: Partial<Capabilities> = { intercept: false }
 
   // ---- interception ----
 

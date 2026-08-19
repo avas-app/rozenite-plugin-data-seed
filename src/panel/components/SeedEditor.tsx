@@ -20,6 +20,8 @@ export type EditorTarget = {
   source: 'query' | 'fixture'
   /** Fixture name, when the target came from one. */
   fixtureName?: string
+  /** Fixture id within the app's require.context, used to read its value. */
+  fixtureId?: string
 }
 
 /**

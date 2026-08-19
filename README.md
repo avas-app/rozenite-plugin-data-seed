@@ -75,12 +75,30 @@ changed.
 
 ## Fixtures
 
-A seed you have to retype is a seed you will not reuse. Switch the left rail to
-**Fixtures**, point it at a folder once (`seeds/` in your repo is a good
-default), and every seed can be saved under a name and restored in one click.
+A seed you have to retype is a seed you will not reuse. Point the hook at a
+folder and every JSON file in it becomes a named fixture you can restore in one
+click:
 
-Fixtures are plain, diff-friendly JSON — commit them and the whole team gets
-them:
+```ts
+useQuerySeeder(queryClient, {
+  fixtures: require.context('./seeds', false, /\.json$/),
+})
+```
+
+`./seeds` is the documented default — change it by changing that path. It has to
+be a literal, because Metro resolves `require.context` statically.
+
+**That one line is the whole setup, and only one person has to write it.**
+Fixtures ride in the app bundle, so a teammate who clones the repo opens the
+panel and sees the same list with nothing to configure. Add a fixture file and
+Metro re-bundles it in.
+
+React Native ships no type for `require.context`; `example/require-context.d.ts`
+is three lines you can copy.
+
+### The file format
+
+Plain, diff-friendly JSON — commit them and the whole team gets them:
 
 ```json
 {
@@ -92,26 +110,35 @@ them:
 }
 ```
 
-A fixture carries its own `queryKey`, so restoring one seeds the right query
-even if that screen has never been opened and the query is not in the cache yet.
+A fixture carries its own `queryKey`, so restoring one seeds the right query even
+if that screen has never been opened and the query is not in the cache yet.
 Hand-written fixtures work too — `queryKey` and `data` are the only required
-fields.
+fields, and a malformed file is reported in the panel by name rather than
+silently skipped.
 
-The folder is reached through the browser's File System Access API, which means
-no extra install and no config, but two things follow from it:
+### Saving new fixtures
 
-- **Chrome only.** Fine in practice, since React Native DevTools *is* Chrome.
+Reading needs nothing. *Writing* is the one thing a bundle cannot do, so the
+first time you save, the panel asks for access to the folder — once, through
+Chrome's directory picker, remembered afterwards. Two consequences:
+
+- **Saving is Chrome-only.** Fine in practice, since React Native DevTools *is*
+  Chrome. Reading works regardless.
 - **Access needs re-granting after a browser restart.** Chrome downgrades the
-  saved permission to `prompt`, so the panel shows a *Reconnect folder* button
-  rather than failing silently.
+  saved permission to `prompt`, so the panel shows a *Reconnect* button rather
+  than failing silently.
+
+You can also just write the file yourself. Nothing about a fixture requires the
+panel to have created it.
 
 ## Limitations
 
 - **v1 is raw JSON.** You paste a value; there is no generation from types yet.
   See [Roadmap](#roadmap).
-- **Fixtures are not scriptable yet.** Because the store runs in the browser,
-  CI and E2E runs cannot load fixtures. The store sits behind a `FixtureStore`
-  interface so a CLI-backed implementation can be added without touching the UI.
+- **Saving fixtures is not scriptable yet.** Reading works anywhere the bundle
+  runs, but writing goes through the browser, so CI cannot author fixtures. The
+  write path sits behind a `FixtureStore` interface so a CLI-backed
+  implementation can be added without touching the UI.
 - **`queryFn`-level only.** This seeds what a query *resolves to*. It does not
   mock mutations, sequence responses, or simulate latency — that is a mock
   server's job, and [MSW](https://mswjs.io) already does it well.
@@ -141,6 +168,11 @@ cd example && bun install && bun run ios
 
 Seed `["todos"]`, then press **Break the API**. The screen keeps rendering your
 data while every request behind it fails.
+
+It ships a `seeds/` directory covering the states that are tedious to reach
+against a real backend — an empty list, 200 items, every variant of a
+discriminated union, a 15-level-deep comment tree — plus one deliberately
+malformed file, so the panel's error surface is exercised too.
 
 Its types are also deliberately hostile — a generic `ApiResponse<T>` envelope,
 an `any` leak, a self-recursive comment tree, a discriminated union, and ISO

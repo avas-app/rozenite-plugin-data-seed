@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "name": "thread \u2014 15 levels deep",
+  "queryKey": [
+    "thread",
+    42
+  ],
+  "savedAt": "2026-08-19T10:00:00.000Z",
+  "data": {
+    "data": {
+      "id": 1,
+      "author": "user1",
+      "body": "Reply at depth 1",
+      "createdAt": "2026-08-19T10:00:00.000Z",
+      "replies": [
+        {
+          "id": 2,
+          "author": "user2",
+          "body": "Reply at depth 2",
+          "createdAt": "2026-08-19T10:00:00.000Z",
+          "replies": [
+            {
+              "id": 3,
+              "author": "user3",
+              "body": "Reply at depth 3",
+              "createdAt": "2026-08-19T10:00:00.000Z",
+              "replies": [
+                {
+                  "id": 4,
+                  "author": "user4",
+                  "body": "Reply at depth 4",
+                  "createdAt": "2026-08-19T10:00:00.000Z",
+                  "replies": [
+                    {
+                      "id": 5,
+                      "author": "user5",
+                      "body": "Reply at depth 5",
+                      "createdAt": "2026-08-19T10:00:00.000Z",
+                      "replies": [
+                        {
+                          "id": 6,
+                          "author": "user6",
+                          "body": "Reply at depth 6",
+                          "createdAt": "2026-08-19T10:00:00.000Z",
+                          "replies": [
+                            {
+                              "id": 7,
+                              "author": "user7",
+                              "body": "Reply at depth 7",
+                              "createdAt": "2026-08-19T10:00:00.000Z",
+                              "replies": [
+                                {
+                                  "id": 8,
+                                  "author": "user8",
+                                  "body": "Reply at depth 8",
+                                  "createdAt": "2026-08-19T10:00:00.000Z",
+                                  "replies": [
+                                    {
+                                      "id": 9,
+                                      "author": "user9",
+                                      "body": "Reply at depth 9",
+                                      "createdAt": "2026-08-19T10:00:00.000Z",
+                                      "replies": [
+                                        {
+                                          "id": 10,
+                                          "author": "user10",
+                                          "body": "Reply at depth 10",
+                                          "createdAt": "2026-08-19T10:00:00.000Z",
+                                          "replies": [
+                                            {
+                                              "id": 11,
+                                              "author": "user11",
+                                              "body": "Reply at depth 11",
+                                              "createdAt": "2026-08-19T10:00:00.000Z",
+                                              "replies": [
+                                                {
+                                                  "id": 12,
+                                                  "author": "user12",
+                                                  "body": "Reply at depth 12",
+                                                  "createdAt": "2026-08-19T10:00:00.000Z",
+                                                  "replies": [
+                                                    {
+                                                      "id": 13,
+                                                      "author": "user13",
+                                                      "body": "Reply at depth 13",
+                                                      "createdAt": "2026-08-19T10:00:00.000Z",
+                                                      "replies": [
+                                                        {
+                                                          "id": 14,
+                                                          "author": "user14",
+                                                          "body": "Reply at depth 14",
+                                                          "createdAt": "2026-08-19T10:00:00.000Z",
+                                                          "replies": [
+                                                            {
+                                                              "id": 15,
+                                                              "author": "user15",
+                                                              "body": "Reply at depth 15",
+                                                              "createdAt": "2026-08-19T10:00:00.000Z",
+                                                              "replies": []
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "meta": {
+      "requestId": "req_fixture",
+      "durationMs": 0
+    }
+  }
+}

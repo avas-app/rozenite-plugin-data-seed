@@ -65,6 +65,32 @@ export type QuerySnapshot = {
   error?: string
 }
 
+/**
+ * A fixture that shipped inside the app bundle.
+ *
+ * Bundled fixtures are the default source: they come from a directory in the
+ * consuming repo, so anyone who clones the project sees the same list with no
+ * setup. Only *writing* a new one needs the panel's folder access.
+ *
+ * Like queries, the summary carries no `data` — a fixtures directory can hold
+ * megabytes, and the panel asks for one value at a time with
+ * `seed:read-fixture`.
+ */
+export type BundledFixture = {
+  /** Key within the require.context, e.g. `./cart-with-50-items.json`. */
+  id: string
+  name: string
+  queryKey: unknown[]
+  savedAt: string
+  byteLength: number
+}
+
+/** A fixture file that could not be read, surfaced instead of silently hidden. */
+export type FixtureProblem = {
+  id: string
+  reason: string
+}
+
 /** An active seed, as the panel lists it. */
 export type SeedSnapshot = {
   queryHash: string
@@ -80,6 +106,8 @@ export type SeedSnapshot = {
  * than silently doing nothing.
  */
 export type Capabilities = {
+  /** A fixtures directory was supplied, so the panel can list bundled fixtures. */
+  fixtures: boolean
   /**
    * `queryClient.defaultQueryOptions` was wrappable, so seeds survive refetch.
    * When false the plugin degrades to one-shot `setQueryData` writes, which the
@@ -96,6 +124,8 @@ export type Capabilities = {
 export type Snapshot = {
   queries: QuerySnapshot[]
   seeds: SeedSnapshot[]
+  fixtures: BundledFixture[]
+  fixtureProblems: FixtureProblem[]
   capabilities: Capabilities
 }
 
@@ -110,6 +140,12 @@ export type QuerySeedEventMap = {
   'seed:seeds': { seeds: SeedSnapshot[] }
   /** Reply to `seed:read-data`. `data` is serialized, not raw. */
   'seed:data': { queryHash: string; data: SerializedPayload }
+  'seed:fixtures': {
+    fixtures: BundledFixture[]
+    problems: FixtureProblem[]
+  }
+  /** Reply to `seed:read-fixture`. */
+  'seed:fixture-data': { id: string; data: SerializedPayload }
 
   // ---- panel -> React Native ----
   'seed:request-snapshot': Record<string, never>
@@ -122,6 +158,7 @@ export type QuerySeedEventMap = {
   'seed:clear': { queryHash: string }
   'seed:clear-all': Record<string, never>
   'seed:read-data': { queryHash: string }
+  'seed:read-fixture': { id: string }
 }
 
 /**

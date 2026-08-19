@@ -59,8 +59,12 @@ function Root() {
   const isDark = useColorScheme() === 'dark'
   const theme = isDark ? dark : light
 
-  // This is the only line an app needs. Everything below is example scaffolding.
-  useQuerySeeder(queryClient)
+  // The only lines an app needs. `require.context` is what makes the fixtures in
+  // ./seeds show up for anyone who clones the repo — they ride in the bundle,
+  // so there is nothing to configure and no folder to point at.
+  useQuerySeeder(queryClient, {
+    fixtures: require.context('./seeds', false, /\.json$/),
+  })
 
   return (
     <SafeAreaProvider>

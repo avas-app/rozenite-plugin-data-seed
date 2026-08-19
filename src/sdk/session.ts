@@ -1,10 +1,13 @@
 import type {
+  BundledFixture,
   Capabilities,
+  FixtureProblem,
   QuerySnapshot,
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
 } from '../shared/types'
+import type { LoadedFixtures } from './fixtures'
 import { approximateSize, serialize } from './serialize'
 
 /**
@@ -44,6 +47,7 @@ export type SeedDriver = {
 export type SessionSink = {
   queries: (queries: QuerySnapshot[]) => void
   seeds: (seeds: SeedSnapshot[]) => void
+  fixtures: (fixtures: BundledFixture[], problems: FixtureProblem[]) => void
 }
 
 /** Coalescing window for cache events. */
@@ -53,15 +57,41 @@ export class Session {
   #seeds = new Map<string, Seed>()
   #driver: SeedDriver | null = null
   #sink: SessionSink | null = null
-  #capabilities: Capabilities = { intercept: false }
+  #capabilities: Capabilities = { intercept: false, fixtures: false }
+  #fixtures: LoadedFixtures = { summaries: [], problems: [], byId: new Map() }
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #disposed = false
 
   // ---- wiring ----
 
-  attachDriver(driver: SeedDriver | null, capabilities: Capabilities): void {
+  /**
+   * Capabilities are merged rather than replaced: interception is discovered by
+   * `instrumentClient`, fixtures are supplied by the hook, and neither should
+   * be able to clear the other's finding by attaching later.
+   */
+  attachDriver(driver: SeedDriver | null, capabilities: Partial<Capabilities>): void {
     this.#driver = driver
-    this.#capabilities = capabilities
+    this.#capabilities = { ...this.#capabilities, ...capabilities }
+  }
+
+  setFixtures(fixtures: LoadedFixtures): void {
+    this.#fixtures = fixtures
+    this.#capabilities = { ...this.#capabilities, fixtures: true }
+    const sink = this.#sink
+    if (sink) sink.fixtures(fixtures.summaries, fixtures.problems)
+  }
+
+  readFixture(id: string): SerializedPayload {
+    const fixture = this.#fixtures.byId.get(id)
+    return fixture ? serialize(fixture.data) : { kind: 'undefined' }
+  }
+
+  get fixtureSummaries(): BundledFixture[] {
+    return this.#fixtures.summaries
+  }
+
+  get fixtureProblems(): FixtureProblem[] {
+    return this.#fixtures.problems
   }
 
   attachSink(sink: SessionSink | null): void {
@@ -75,6 +105,7 @@ export class Session {
     this.#sink = null
     this.#driver = null
     this.#seeds.clear()
+    this.#fixtures = { summaries: [], problems: [], byId: new Map() }
   }
 
   // ---- seed registry (read by the interceptor on every query resolution) ----
@@ -137,6 +168,8 @@ export class Session {
     return {
       queries: this.#driver?.listQueries() ?? [],
       seeds: this.seedList(),
+      fixtures: this.#fixtures.summaries,
+      fixtureProblems: this.#fixtures.problems,
       capabilities: this.#capabilities,
     }
   }

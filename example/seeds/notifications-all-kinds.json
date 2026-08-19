@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "notifications \u2014 every union variant",
+  "queryKey": [
+    "notifications"
+  ],
+  "savedAt": "2026-08-19T10:00:00.000Z",
+  "data": {
+    "data": [
+      {
+        "kind": "mention",
+        "id": 1,
+        "from": "ada",
+        "commentId": 42
+      },
+      {
+        "kind": "system",
+        "id": 2,
+        "severity": "warn",
+        "message": "Degraded performance"
+      },
+      {
+        "kind": "digest",
+        "id": 3,
+        "period": "weekly",
+        "count": 128
+      }
+    ],
+    "meta": {
+      "requestId": "req_fixture",
+      "durationMs": 0
+    }
+  }
+}

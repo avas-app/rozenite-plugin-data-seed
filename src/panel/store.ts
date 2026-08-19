@@ -2,7 +2,9 @@ import { useEffect, useMemo, useReducer } from 'react'
 import { useRozeniteDevToolsClient } from '@rozenite/plugin-bridge'
 
 import type {
+  BundledFixture,
   Capabilities,
+  FixtureProblem,
   QuerySeedEventMap,
   QuerySnapshot,
   SeedSnapshot,
@@ -16,6 +18,9 @@ export type PanelState = {
   hydrated: boolean
   queries: QuerySnapshot[]
   seeds: SeedSnapshot[]
+  /** Fixtures that shipped in the app bundle — the default, setup-free source. */
+  fixtures: BundledFixture[]
+  fixtureProblems: FixtureProblem[]
   capabilities: Capabilities
   /**
    * Full data for the query currently open in the editor, fetched on demand.
@@ -23,14 +28,19 @@ export type PanelState = {
    * ever holds a complete cache value.
    */
   editorData: { queryHash: string; data: SerializedPayload } | null
+  /** Full value of the fixture currently open, fetched on demand. */
+  fixtureData: { id: string; data: SerializedPayload } | null
 }
 
 const INITIAL: PanelState = {
   hydrated: false,
   queries: [],
   seeds: [],
-  capabilities: { intercept: false },
+  fixtures: [],
+  fixtureProblems: [],
+  capabilities: { intercept: false, fixtures: false },
   editorData: null,
+  fixtureData: null,
 }
 
 type Action =
@@ -38,6 +48,8 @@ type Action =
   | { type: 'queries'; queries: QuerySnapshot[] }
   | { type: 'seeds'; seeds: SeedSnapshot[] }
   | { type: 'data'; queryHash: string; data: SerializedPayload }
+  | { type: 'fixtures'; fixtures: BundledFixture[]; problems: FixtureProblem[] }
+  | { type: 'fixture-data'; id: string; data: SerializedPayload }
   | { type: 'clear-editor' }
 
 function reducer(state: PanelState, action: Action): PanelState {
@@ -48,6 +60,8 @@ function reducer(state: PanelState, action: Action): PanelState {
         hydrated: true,
         queries: action.snapshot.queries,
         seeds: action.snapshot.seeds,
+        fixtures: action.snapshot.fixtures,
+        fixtureProblems: action.snapshot.fixtureProblems,
         capabilities: action.snapshot.capabilities,
       }
     case 'queries':
@@ -59,8 +73,16 @@ function reducer(state: PanelState, action: Action): PanelState {
         ...state,
         editorData: { queryHash: action.queryHash, data: action.data },
       }
+    case 'fixtures':
+      return {
+        ...state,
+        fixtures: action.fixtures,
+        fixtureProblems: action.problems,
+      }
+    case 'fixture-data':
+      return { ...state, fixtureData: { id: action.id, data: action.data } }
     case 'clear-editor':
-      return { ...state, editorData: null }
+      return { ...state, editorData: null, fixtureData: null }
     default:
       return state
   }
@@ -69,6 +91,7 @@ function reducer(state: PanelState, action: Action): PanelState {
 export type PanelActions = {
   /** Asks the app for one query's full data, to prefill the editor. */
   readData: (queryHash: string) => void
+  readFixture: (id: string) => void
   apply: (queryKey: unknown[], data: unknown) => void
   clear: (queryHash: string) => void
   clearAll: () => void
@@ -104,6 +127,12 @@ export function useQuerySeedPanel(): {
       client.onMessage('seed:data', ({ queryHash, data }) =>
         dispatch({ type: 'data', queryHash, data }),
       ),
+      client.onMessage('seed:fixtures', ({ fixtures, problems }) =>
+        dispatch({ type: 'fixtures', fixtures, problems }),
+      ),
+      client.onMessage('seed:fixture-data', ({ id, data }) =>
+        dispatch({ type: 'fixture-data', id, data }),
+      ),
     ]
 
     // The app may have been running long before this panel opened.
@@ -115,6 +144,7 @@ export function useQuerySeedPanel(): {
   const actions = useMemo<PanelActions>(
     () => ({
       readData: (queryHash) => client?.send('seed:read-data', { queryHash }),
+      readFixture: (id) => client?.send('seed:read-fixture', { id }),
       apply: (queryKey, data) => client?.send('seed:apply', { queryKey, data }),
       clear: (queryHash) => client?.send('seed:clear', { queryHash }),
       clearAll: () => client?.send('seed:clear-all', {}),

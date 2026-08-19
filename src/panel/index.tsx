@@ -8,8 +8,8 @@ import {
 } from '@rozenite/ui'
 import { Loader2, PlugZap } from 'lucide-react'
 
-import type { FixtureSummary } from '../shared/fixture'
 import { sameQueryKey } from '../shared/fixture'
+import type { BundledFixture } from '../shared/types'
 import { FixtureList } from './components/FixtureList'
 import { QueryList } from './components/QueryList'
 import {
@@ -48,6 +48,28 @@ export default function QuerySeedPanel() {
     setFilledFor(incoming.queryHash)
   }, [incoming, filledFor])
 
+  const incomingFixture =
+    target?.fixtureId && state.fixtureData?.id === target.fixtureId
+      ? state.fixtureData
+      : null
+
+  useEffect(() => {
+    if (!incomingFixture || filledFor === incomingFixture.id) return
+    setText(toEditableText(incomingFixture.data))
+    setFilledFor(incomingFixture.id)
+  }, [incomingFixture, filledFor])
+
+  // Saving is the one path that needs real filesystem access, so the folder
+  // prompt happens here — at the moment it is required — rather than as a wall
+  // in front of a feature that mostly does not need it.
+  const saveFixture = useCallback(
+    async (name: string, queryKey: unknown[], data: unknown) => {
+      if (!fixtures.state.ready && !(await fixtures.actions.connect())) return
+      await fixtures.actions.save(name, queryKey, data)
+    },
+    [fixtures.actions, fixtures.state.ready],
+  )
+
   const selectQuery = useCallback(
     (queryHash: string) => {
       const query = state.queries.find((q) => q.queryHash === queryHash)
@@ -61,20 +83,23 @@ export default function QuerySeedPanel() {
     [actions, state.queries],
   )
 
+  // Fixture values come from the app bundle over the bridge, like cache reads,
+  // rather than from the browser's filesystem access — which is what lets this
+  // work with no folder ever having been chosen.
   const openFixture = useCallback(
-    async (summary: FixtureSummary) => {
-      const fixture = await fixtures.actions.load(summary.fileName)
-      if (!fixture) return
+    (fixture: BundledFixture) => {
       setTarget({
         queryKey: fixture.queryKey,
         queryHash: null,
         source: 'fixture',
         fixtureName: fixture.name,
+        fixtureId: fixture.id,
       })
-      setText(JSON.stringify(fixture.data, null, 2))
-      setFilledFor(summary.fileName)
+      setText('')
+      setFilledFor(null)
+      actions.readFixture(fixture.id)
     },
-    [fixtures.actions],
+    [actions],
   )
 
   // Resolved by key rather than hash: a fixture can target a query that has
@@ -116,7 +141,9 @@ useQuerySeeder(queryClient)`}
     )
   }
 
-  const loading = target?.source === 'query' && filledFor !== target.queryHash
+  const loading =
+    target !== null &&
+    filledFor !== (target.source === 'query' ? target.queryHash : target.fixtureId)
 
   return (
     <Shell>
@@ -144,7 +171,7 @@ useQuerySeeder(queryClient)`}
             />
             <TabButton
               active={tab === 'fixtures'}
-              count={fixtures.state.ready ? fixtures.state.fixtures.length : null}
+              count={state.capabilities.fixtures ? state.fixtures.length : null}
               label="Fixtures"
               onClick={() => setTab('fixtures')}
             />
@@ -160,23 +187,26 @@ useQuerySeeder(queryClient)`}
             />
           ) : (
             <FixtureList
-              actions={fixtures.actions}
-              activeQueryKey={target ? JSON.stringify(target.queryKey) : null}
-              onOpen={(summary) => void openFixture(summary)}
-              state={fixtures.state}
+              capable={state.capabilities.fixtures}
+              fixtures={state.fixtures}
+              onOpen={openFixture}
+              problems={state.fixtureProblems}
+              selectedId={target?.fixtureId ?? null}
+              writeActions={fixtures.actions}
+              writeState={fixtures.state}
             />
           )}
         </aside>
 
         <SeedEditor
-          canSaveFixture={fixtures.state.ready}
+          canSaveFixture={fixtures.state.supported}
           intercept={state.capabilities.intercept}
           loading={loading}
           onApply={actions.apply}
           onChange={setText}
           onClear={() => activeSeed && actions.clear(activeSeed.queryHash)}
           onSaveFixture={(name, queryKey, data) =>
-            void fixtures.actions.save(name, queryKey, data)
+            void saveFixture(name, queryKey, data)
           }
           seeded={Boolean(activeSeed)}
           target={target}

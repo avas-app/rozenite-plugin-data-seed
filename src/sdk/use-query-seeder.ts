@@ -3,11 +3,27 @@ import { useRozeniteDevToolsClient } from '@rozenite/plugin-bridge'
 
 import type { QuerySeedEventMap } from '../shared/types'
 import { PLUGIN_ID } from '../shared/types'
+import type { FixtureSource } from './fixtures'
+import { loadFixtures } from './fixtures'
 import type { QueryClientLike } from './instrument'
 import { instrumentClient } from './instrument'
 import { Session } from './session'
 
 export type QuerySeederOptions = {
+  /**
+   * Fixtures bundled with the app, so everyone who clones the repo sees the
+   * same list with no setup:
+   *
+   * ```ts
+   * useQuerySeeder(queryClient, {
+   *   fixtures: require.context('./seeds', false, /\.json$/),
+   * })
+   * ```
+   *
+   * `./seeds` is the documented default, but the path is yours — it has to be a
+   * literal here because Metro resolves `require.context` statically.
+   */
+  fixtures?: FixtureSource
   /** Escape hatch. The plugin is already inert outside `__DEV__`. */
   enabled?: boolean
 }
@@ -37,7 +53,7 @@ export function useQuerySeeder(
   queryClient: QueryClientLike | null | undefined,
   options: QuerySeederOptions = {},
 ): void {
-  const { enabled = true } = options
+  const { fixtures, enabled = true } = options
   const active = enabled && isDev() && Boolean(queryClient)
 
   const sessionRef = useRef<Session | null>(null)
@@ -53,13 +69,17 @@ export function useQuerySeeder(
     const session = new Session()
     sessionRef.current = session
     const dispose = instrumentClient(queryClient, session)
+    // Loaded once per session rather than per panel connection: the modules are
+    // already in the bundle, so this is a parse, but it is a parse over every
+    // fixture in the directory.
+    if (fixtures) session.setFixtures(loadFixtures(fixtures))
 
     return () => {
       dispose()
       session.dispose()
       if (sessionRef.current === session) sessionRef.current = null
     }
-  }, [active, queryClient])
+  }, [active, queryClient, fixtures])
 
   // ---- bridge wiring (re-runs whenever the panel attaches or detaches) ----
   useEffect(() => {
@@ -69,6 +89,8 @@ export function useQuerySeeder(
     session.attachSink({
       queries: (queries) => devToolsClient.send('seed:queries', { queries }),
       seeds: (seeds) => devToolsClient.send('seed:seeds', { seeds }),
+      fixtures: (list, problems) =>
+        devToolsClient.send('seed:fixtures', { fixtures: list, problems }),
     })
 
     devToolsClient.send('seed:snapshot', session.snapshot())
@@ -90,6 +112,12 @@ export function useQuerySeeder(
         devToolsClient.send('seed:data', {
           queryHash,
           data: session.readData(queryHash),
+        })
+      }),
+      devToolsClient.onMessage('seed:read-fixture', ({ id }) => {
+        devToolsClient.send('seed:fixture-data', {
+          id,
+          data: session.readFixture(id),
         })
       }),
     ]
