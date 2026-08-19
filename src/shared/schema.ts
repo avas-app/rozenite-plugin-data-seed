@@ -100,8 +100,6 @@ export function findByPattern<T extends { pattern: unknown[] }>(
   )
 }
 
-/** @deprecated Use {@link findByPattern}. Kept for the device-side call site. */
-export const findSchema = findByPattern
 
 function wildcardCount(pattern: unknown[]): number {
   return pattern.filter((part) => part === WILDCARD).length

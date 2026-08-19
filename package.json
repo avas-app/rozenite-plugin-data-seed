@@ -40,6 +40,7 @@
     "dist",
     "bin",
     "sdk.ts",
+    "skills",
     "src/shared"
   ],
   "keywords": [

@@ -125,7 +125,10 @@ function build(
   if (node.faker) {
     const value = fromToken(node.faker, context.random)
     if (value !== undefined) return value
-    context.warnings.push({ path, reason: `unknown @faker token "${node.faker}"` })
+    context.warnings.push({
+      path,
+      reason: `unknown @faker token "${node.faker}"${suggest(node.faker)}`,
+    })
   }
 
   const type = Array.isArray(node.type) ? node.type[0] : node.type
@@ -347,6 +350,25 @@ function token(
     default:
       return undefined
   }
+}
+
+/**
+ * Suggests a real token for a misspelt one.
+ *
+ * A bare "unknown token" warning sends you to the README to find out that it is
+ * `person.fullName` and not `name.fullName`; naming the likely candidate ends it
+ * there. Matches on either half of the token, since the namespace is what people
+ * usually get wrong.
+ */
+function suggest(raw: string): string {
+  const name = raw.trim().split('(')[0]
+  const [namespace, method] = name.split('.')
+  const candidates = FAKER_TOKENS.filter((candidate) => {
+    const [ns, m] = candidate.split('.')
+    return ns === namespace || (method !== undefined && m === method)
+  })
+  if (candidates.length === 0) return ''
+  return `. Did you mean ${candidates.slice(0, 3).join(', ')}?`
 }
 
 /** The tokens `@faker` understands, for documentation and panel hints. */

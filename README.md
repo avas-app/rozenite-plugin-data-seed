@@ -7,6 +7,12 @@ Stop committing sample data to see a screen. Open DevTools, pick a query key,
 paste JSON, and it lands in the cache — and **stays** there through refetches,
 invalidation, and app focus, until you take it out.
 
+- **Seed any query** with arbitrary JSON, including keys never fetched.
+- **Committed fixtures** that ride in the app bundle, so teammates get them with
+  no setup.
+- **Generate from your TypeScript types**, annotated in-source with JSDoc.
+- **Drive it headlessly** from a script or an E2E run, with no DevTools open.
+
 ## Install
 
 ```bash
@@ -39,6 +45,17 @@ useQuerySeeder(isReady ? queryClient : null)
 
 Then open React Native DevTools (`j` from the Metro terminal) and pick the
 **Query Seed** tab.
+
+That is enough to seed by hand. Two optional arguments unlock the rest —
+[`fixtures`](#fixtures) for committed states and [`schemas`](#generating-from-your-types)
+for generation:
+
+```ts
+useQuerySeeder(queryClient, {
+  fixtures: require.context('./seeds', false, /\.json$/),
+  schemas: require('./query-seed.schemas.json'),
+})
+```
 
 ## Why seeds stick
 
@@ -287,15 +304,6 @@ await session.callTool(querySeedTools.applyFixture, {
 - **`queryFn`-level only.** This seeds what a query *resolves to*. It does not
   mock mutations, sequence responses, or simulate latency — that is a mock
   server's job, and [MSW](https://mswjs.io) already does it well.
-
-## Roadmap
-
-1. **Transport** — push arbitrary JSON at a key, make it stick. *(done)*
-2. **Fixtures** — name a seed, write it to the repo, restore it in one click.
-3. **Typed generation** — JSON Schema extracted from your TypeScript types,
-   annotated in-source with JSDoc. *(done)*
-4. **Headless access** — an agent domain, so a test run can seed a known
-   cache state with no DevTools window open. *(done)*
 
 ## Example app
 

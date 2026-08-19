@@ -184,6 +184,20 @@ describe('warnings', () => {
     expect(warnings[0].reason).toMatch(/unknown @faker token/)
   })
 
+  test('a misspelt token suggests the real one', () => {
+    const wrongNamespace = generate(
+      doc({ type: 'string', faker: 'name.fullName' }),
+      { seed: 's' },
+    )
+    expect(wrongNamespace.warnings[0].reason).toMatch(/person\.fullName/)
+
+    const wrongMethod = generate(
+      doc({ type: 'string', faker: 'person.nope' }),
+      { seed: 's' },
+    )
+    expect(wrongMethod.warnings[0].reason).toMatch(/person\.firstName/)
+  })
+
   test('an unresolved $ref warns instead of throwing', () => {
     const { value, warnings } = generate(doc({ $ref: '#/definitions/Missing' }), {
       seed: 's',
