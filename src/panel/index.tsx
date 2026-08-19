@@ -144,6 +144,9 @@ export default function QuerySeedPanel() {
     setText(JSON.stringify(result.value, null, 2))
     setWarnings(result.warnings)
     setRoll((current) => current + 1)
+    // Marks the editor as filled so a cache read still in flight does not land
+    // on top of what was just generated.
+    setFilledFor(target.queryHash ?? target.fixtureId ?? 'generated')
   }, [itemCount, roll, schemaDocument, target, variant])
 
   // Resolved by key rather than hash: a fixture can target a query that has

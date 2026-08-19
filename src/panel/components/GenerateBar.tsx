@@ -54,7 +54,8 @@ export function GenerateBar({
         <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
           variant
           <Input
-            className="w-14"
+            /* Wider than `items`: this one has to fit the word "auto". */
+            className="w-20"
             min={0}
             onChange={(event) => {
               const raw = event.target.value

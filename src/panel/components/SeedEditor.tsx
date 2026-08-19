@@ -174,8 +174,15 @@ export function SeedEditor({
               Remove seed
             </Button>
           ) : null}
+          {/*
+            Gated on the parse only. `loading` must not disable this: it means
+            "the cache read has not arrived", which says nothing about whether
+            the editor holds something worth applying — generating a value fills
+            the editor while that read is still outstanding, and an empty editor
+            is already a parse error.
+          */}
           <Button
-            disabled={Boolean(parsed.error) || loading}
+            disabled={Boolean(parsed.error)}
             onClick={() => onApply(target.queryKey, parsed.value)}
             size="compact"
           >
