@@ -11,6 +11,7 @@ import { Loader2, PlugZap } from 'lucide-react'
 import { sameQueryKey } from '../shared/fixture'
 import type { GenerateWarning } from '../shared/generate'
 import { generate as generateValue } from '../shared/generate'
+import { describeSchema } from '../shared/describe'
 import { findByPattern } from '../shared/schema'
 import type { SchemaDocument } from '../shared/schema'
 import type { BundledFixture } from '../shared/types'
@@ -134,6 +135,16 @@ export default function QuerySeedPanel() {
     return (state.schema.schema as SchemaDocument | null) ?? null
   }, [schemaSummary, state.schema])
 
+  const shape = useMemo(() => {
+    if (!schemaDocument || !schemaSummary) return null
+    try {
+      return describeSchema(schemaDocument, schemaSummary.type)
+    } catch {
+      // A shape preview is a convenience; never let it take the panel down.
+      return null
+    }
+  }, [schemaDocument, schemaSummary])
+
   const runGenerate = useCallback(() => {
     if (!schemaDocument || !target) return
     const result = generateValue(schemaDocument, {
@@ -256,6 +267,7 @@ useQuerySeeder(queryClient)`}
                 onGenerate={runGenerate}
                 onItemCountChange={setItemCount}
                 onVariantChange={setVariant}
+                shape={shape}
                 typeName={schemaSummary.type}
                 variant={variant}
                 warnings={warnings}

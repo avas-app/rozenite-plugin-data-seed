@@ -192,6 +192,41 @@ useQuerySeeder(queryClient, {
 Select a query and a **Generate** button appears, with controls for array length
 and which union variant to produce.
 
+### Seeing the shape
+
+Click the type name next to **Generate** and the panel renders the type back as
+TypeScript, so you can check what a response looks like without going to find it
+in the source:
+
+```ts
+type ApiResponse<Todo[]> = {
+  data: {
+    id: number
+    title: string  // @faker lorem.sentence
+    done: boolean
+    createdAt: string  // @faker date.recent
+  }[]
+  meta: {
+    requestId: string
+    durationMs: number
+  }
+}
+```
+
+Two things it shows that the source does not, at least not at a glance: which
+fields carry a `@faker` annotation, and which are `any` — the second matters
+because those are exactly the fields generation has to leave `null`.
+
+Types used once are inlined to keep it short. Shared, recursive and union types
+keep their names, so a comment tree ends at `replies: Comment[]` rather than
+expanding forever, and a discriminated union reads the way it was written:
+
+```ts
+type Notification =
+  | { kind: 'mention'; … }
+  | { kind: 'system'; … }
+```
+
 ### The query key map is the part nothing can infer
 
 `"key"` → `"type"` is written by hand, and there is no way around it: TypeScript
