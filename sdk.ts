@@ -2,12 +2,12 @@
  * Agent SDK entry point.
  *
  * Built to `dist/sdk/index.{js,cjs,d.ts}` and consumed as
- * `import { querySeedTools } from '@avasapp/rozenite-plugin-query-seed/sdk'`,
+ * `import { seedTools } from '@avasapp/rozenite-plugin-data-seed/sdk'`,
  * which gives `@rozenite/agent-sdk` callers typed descriptors instead of
  * stringly-typed tool names:
  *
  * ```ts
- * await session.callTool(querySeedTools.applyFixture, {
+ * await session.callTool(seedTools.applyFixture, {
  *   fixture: 'cart with 50 items',
  * })
  * ```
@@ -18,15 +18,15 @@
 
 import { defineAgentToolDescriptors } from '@rozenite/agent-shared'
 
-import { querySeedToolDefinitions } from './src/shared/agent-tools'
+import { seedToolDefinitions } from './src/shared/agent-tools'
 import { PLUGIN_ID } from './src/shared/types'
 
-export { querySeedToolDefinitions, PLUGIN_ID }
+export { seedToolDefinitions, PLUGIN_ID }
 
 /** Tool descriptors bound to this plugin's domain, for `session.callTool`. */
-export const querySeedTools = defineAgentToolDescriptors(
+export const seedTools = defineAgentToolDescriptors(
   PLUGIN_ID,
-  querySeedToolDefinitions,
+  seedToolDefinitions,
 )
 
 export type {
@@ -41,22 +41,28 @@ export type {
   GenerateSeedArgs,
   GenerateSeedResult,
   ListFixturesResult,
-  ListQueriesArgs,
-  ListQueriesResult,
-  QueryRow,
-  ReadQueryArgs,
-  ReadQueryResult,
+  ListTargetsArgs,
+  ListTargetsResult,
+  AdapterRow,
+  TargetArgs,
+  TargetRow,
+  ReadTargetArgs,
+  ReadTargetResult,
 } from './src/shared/agent-tools'
 
 export type {
+  AdapterInfo,
   BundledFixture,
   Capabilities,
   FetchStatus,
-  QuerySnapshot,
-  QueryStatus,
   SchemaSummary,
+  SeedMeta,
   SeedSnapshot,
+  TargetSnapshot,
+  TargetStatus,
 } from './src/shared/types'
+
+export type { SeedTarget, TargetPattern, TargetRef } from './src/shared/target'
 
 export type { Fixture, FixtureSummary } from './src/shared/fixture'
 export type { SchemaDocument, SchemaEntry, SchemasFile } from './src/shared/schema'

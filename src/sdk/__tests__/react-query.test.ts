@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { QueryClient } from '@tanstack/react-query'
 
-import type { QueryClientLike } from '../instrument'
-import { instrumentClient } from '../instrument'
+import type { QueryClientLike } from '../adapters/react-query'
+import { installReactQueryAdapter } from '../adapters/react-query'
+import { keyTarget } from '../../shared/target'
 import { Session } from '../session'
 
 /**
@@ -22,11 +23,14 @@ function setup() {
     defaultOptions: { queries: { retry: false } },
   })
   const session = new Session()
-  const dispose = instrumentClient(client as unknown as QueryClientLike, session)
+  const dispose = installReactQueryAdapter(
+    client as unknown as QueryClientLike,
+    session,
+  )
   return { client, session, dispose }
 }
 
-describe('seed interception', () => {
+describe('react query seed interception', () => {
   test('a seed beats the queryFn the caller passes inline', async () => {
     const { client, session, dispose } = setup()
     let realCalls = 0
@@ -35,7 +39,7 @@ describe('seed interception', () => {
       return { source: 'network' }
     }
 
-    session.apply(['todos'], { source: 'seed' })
+    session.apply(keyTarget(['todos']), { source: 'seed' })
 
     const result = await client.fetchQuery({ queryKey: ['todos'], queryFn: realFn })
 
@@ -49,7 +53,7 @@ describe('seed interception', () => {
     const realFn = async () => ({ source: 'network' })
 
     await client.fetchQuery({ queryKey: ['todos'], queryFn: realFn })
-    session.apply(['todos'], { source: 'seed' })
+    session.apply(keyTarget(['todos']), { source: 'seed' })
 
     await client.refetchQueries({ queryKey: ['todos'], exact: true })
 
@@ -61,12 +65,12 @@ describe('seed interception', () => {
     const { client, session, dispose } = setup()
     const realFn = async () => ({ source: 'network' })
 
-    session.apply(['todos'], { source: 'seed' })
+    session.apply(keyTarget(['todos']), { source: 'seed' })
     await client.fetchQuery({ queryKey: ['todos'], queryFn: realFn })
     expect(client.getQueryData<Source>(['todos'])).toEqual({ source: 'seed' })
 
-    const [{ queryHash }] = session.seedList()
-    session.clear(queryHash)
+    const [{ id }] = session.seedList()
+    session.clear(id)
     await client.fetchQuery({ queryKey: ['todos'], queryFn: realFn })
 
     expect(client.getQueryData<Source>(['todos'])).toEqual({ source: 'network' })
@@ -76,7 +80,7 @@ describe('seed interception', () => {
   test('seeding a key that is not in the cache yet creates it', async () => {
     const { client, session, dispose } = setup()
 
-    session.apply(['user', 7], { name: 'Seeded' })
+    session.apply(keyTarget(['user', 7]), { name: 'Seeded' })
 
     expect(client.getQueryData<{ name: string }>(['user', 7])).toEqual({ name: 'Seeded' })
     dispose()
@@ -86,7 +90,7 @@ describe('seed interception', () => {
     const { client, session, dispose } = setup()
     const realFn = async () => ({ source: 'network' })
 
-    session.apply(['todos'], { source: 'seed' })
+    session.apply(keyTarget(['todos']), { source: 'seed' })
     const detail = await client.fetchQuery({
       queryKey: ['todos', 'detail', 1],
       queryFn: realFn,
@@ -102,7 +106,7 @@ describe('seed interception', () => {
     const { client, session, dispose } = setup()
     const realFn = async () => ({ items: [] as string[] })
 
-    session.apply(['todos'], { items: ['a'] })
+    session.apply(keyTarget(['todos']), { items: ['a'] })
 
     const first = (await client.fetchQuery({
       queryKey: ['todos'],
@@ -120,7 +124,7 @@ describe('seed interception', () => {
     const { client, session, dispose } = setup()
     const realFn = async () => ({ source: 'network' })
 
-    session.apply(['todos'], { source: 'seed' })
+    session.apply(keyTarget(['todos']), { source: 'seed' })
     dispose()
 
     const result = await client.fetchQuery({ queryKey: ['todos'], queryFn: realFn })
@@ -129,7 +133,7 @@ describe('seed interception', () => {
 
   test('reports that interception is available', () => {
     const { session, dispose } = setup()
-    expect(session.snapshot().capabilities.intercept).toBe(true)
+    expect(session.adapters[0]?.intercept).toBe(true)
     dispose()
   })
 })
@@ -142,24 +146,24 @@ describe('snapshots', () => {
       queryKey: ['todos'],
       queryFn: async () => [{ id: 1, title: 'One' }],
     })
-    session.apply(['user', 7], { name: 'Seeded' })
+    session.apply(keyTarget(['user', 7]), { name: 'Seeded' })
 
-    const { queries, seeds } = session.snapshot()
-    const todos = queries.find((q) => q.queryHash === JSON.stringify(['todos']))
+    const { targets, seeds } = session.snapshot()
+    const todos = targets.find((t) => t.label === JSON.stringify(['todos']))
 
     expect(todos?.status).toBe('success')
     expect(todos?.seeded).toBe(false)
     expect(todos?.preview?.kind).toBe('json')
     expect(seeds).toHaveLength(1)
-    expect(seeds[0].queryKey).toEqual(['user', 7])
+    expect(seeds[0].ref).toEqual({ kind: 'key', key: ['user', 7] })
     dispose()
   })
 
   test('clearAll withdraws every seed', () => {
     const { session, dispose } = setup()
 
-    session.apply(['a'], 1)
-    session.apply(['b'], 2)
+    session.apply(keyTarget(['a']), 1)
+    session.apply(keyTarget(['b']), 2)
     expect(session.seedCount).toBe(2)
 
     session.clearAll()

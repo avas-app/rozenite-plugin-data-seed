@@ -1,9 +1,12 @@
 /**
- * The extracted-schema file format, and how a query key finds its schema.
+ * The extracted-schema file format, and how a target finds its schema.
  *
- * Written by `query-seed extract`, committed, and bundled with the app exactly
+ * Written by `data-seed extract`, committed, and bundled with the app exactly
  * like fixtures are — the panel cannot read the repo, but Metro can bundle it.
  */
+
+import type { TargetPattern, TargetPatternJson } from './target'
+import { parseTargetPattern, serializeTargetPattern } from './target'
 
 /** A JSON Schema node, kept loose because it comes from a generator. */
 export type SchemaNode = {
@@ -33,20 +36,34 @@ export type SchemaDocument = SchemaNode & {
   definitions?: Record<string, SchemaNode>
 }
 
-export const SCHEMAS_VERSION = 1
+/**
+ * Bumped to 2 when patterns stopped being query-key arrays only.
+ *
+ * A v1 file still reads correctly — its array patterns mean exactly what they
+ * always did — but a v2 file may contain route strings, which a v1 reader would
+ * silently fail to match rather than reject.
+ */
+export const SCHEMAS_VERSION = 2
 
 /**
- * One query key pattern and the type its response has.
+ * One target pattern and the type its response has.
  *
- * `pattern` is a query key with `"*"` standing for any single element, so
- * `["user", "*"]` covers `["user", 7]` without an entry per user. Nothing infers
- * this mapping — TypeScript has no idea which type belongs to which key — so it
- * is written by hand in `query-seed.config.json` and is the one piece of this
- * feature that cannot be derived.
+ * `pattern` is either a query key with `"*"` standing for any single element
+ * (`["user", "*"]` covers `["user", 7]`), or a route (`"GET /api/users/*"`).
+ * Nothing infers this mapping — TypeScript has no idea which type belongs to
+ * which key or URL — so it is written by hand in `data-seed.config.json` and is
+ * the one piece of this feature that cannot be derived.
  */
 export type SchemaEntry = {
-  pattern: unknown[]
+  pattern: TargetPattern
   /** The TypeScript type name, for display. */
+  type: string
+  schema: SchemaDocument
+}
+
+/** The entry as it appears on disk, where a pattern is an array or a string. */
+export type SchemaEntryJson = {
+  pattern: TargetPatternJson
   type: string
   schema: SchemaDocument
 }
@@ -57,59 +74,15 @@ export type SchemasFile = {
   entries: SchemaEntry[]
 }
 
-/** The wildcard element in a pattern. */
-export const WILDCARD = '*'
-
-/**
- * Matches a concrete query key against a pattern.
- *
- * Length must match exactly. A pattern shorter than the key would make
- * `["user"]` capture `["user", 7, "posts"]`, which is how a list schema ends up
- * generating data for a detail route.
- */
-export function matchesPattern(pattern: unknown[], queryKey: unknown[]): boolean {
-  if (pattern.length !== queryKey.length) return false
-  return pattern.every((part, index) => {
-    if (part === WILDCARD) return true
-    try {
-      return JSON.stringify(part) === JSON.stringify(queryKey[index])
-    } catch {
-      return false
-    }
-  })
-}
-
-/**
- * Finds the entry whose pattern covers a key.
- *
- * Generic over the entry shape because the panel holds only `{pattern, type}`
- * summaries while the device holds full schemas, and both need the same
- * matching rules — duplicating them is how the two ends drift apart.
- *
- * Exact patterns win over wildcards, so a hand-written entry for one specific
- * key can override the general one without depending on file order.
- */
-export function findByPattern<T extends { pattern: unknown[] }>(
-  entries: T[],
-  queryKey: unknown[],
-): T | null {
-  const matches = entries.filter((entry) => matchesPattern(entry.pattern, queryKey))
-  if (matches.length === 0) return null
-  return matches.reduce((best, entry) =>
-    wildcardCount(entry.pattern) < wildcardCount(best.pattern) ? entry : best,
-  )
-}
-
-
-function wildcardCount(pattern: unknown[]): number {
-  return pattern.filter((part) => part === WILDCARD).length
-}
-
 export function parseSchemasFile(raw: unknown): SchemasFile {
   if (!raw || typeof raw !== 'object') {
     throw new Error('schemas file must be a JSON object')
   }
-  const candidate = raw as Partial<SchemasFile>
+  const candidate = raw as {
+    version?: number
+    generatedAt?: string
+    entries?: unknown
+  }
   if (!Array.isArray(candidate.entries)) {
     throw new Error('schemas file is missing an entries array')
   }
@@ -121,6 +94,20 @@ export function parseSchemasFile(raw: unknown): SchemasFile {
   return {
     version: candidate.version ?? SCHEMAS_VERSION,
     generatedAt: candidate.generatedAt ?? '',
-    entries: candidate.entries,
+    entries: (candidate.entries as SchemaEntryJson[]).map((entry, index) => {
+      try {
+        return { ...entry, pattern: parseTargetPattern(entry.pattern) }
+      } catch (error) {
+        throw new Error(
+          `schemas file entry ${index}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+    }),
   }
+}
+
+export function serializeSchemaEntry(entry: SchemaEntry): SchemaEntryJson {
+  return { ...entry, pattern: serializeTargetPattern(entry.pattern) }
 }

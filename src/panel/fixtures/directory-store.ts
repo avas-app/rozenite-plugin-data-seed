@@ -131,7 +131,7 @@ export function createDirectoryStore(
       return {
         name: fixture.name,
         fileName,
-        queryKey: fixture.queryKey,
+        target: fixture.target,
         savedAt: fixture.savedAt,
         byteLength: text.length,
       }

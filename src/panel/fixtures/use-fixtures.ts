@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { createFixture } from '../../shared/fixture'
+import type { TargetRef } from '../../shared/target'
+import type { SeedMeta } from '../../shared/types'
 import {
   createDirectoryStore,
   ensureAccess,
@@ -34,7 +36,12 @@ export type FixturesActions = {
   connect: () => Promise<boolean>
   reconnect: () => Promise<void>
   forget: () => Promise<void>
-  save: (name: string, queryKey: unknown[], data: unknown) => Promise<void>
+  save: (
+    name: string,
+    target: TargetRef,
+    data: unknown,
+    meta?: SeedMeta,
+  ) => Promise<void>
 }
 
 export function useFixtures(): {
@@ -110,9 +117,11 @@ export function useFixtures(): {
         setGranted(false)
       },
 
-      save: async (name, queryKey, data) => {
+      save: async (name, target, data, meta) => {
         await run(() =>
-          store.write(createFixture(name, queryKey, data, new Date().toISOString())),
+          store.write(
+            createFixture(name, target, data, new Date().toISOString(), meta),
+          ),
         )
       },
     }),

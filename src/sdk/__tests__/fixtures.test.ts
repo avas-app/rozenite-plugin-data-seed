@@ -16,7 +16,7 @@ function context(modules: Record<string, unknown>): FixtureContext {
 const CART = {
   version: 1,
   name: 'cart with 50 items',
-  queryKey: ['cart', { userId: 7 }],
+  target: ['cart', { userId: 7 }],
   savedAt: '2026-08-19T10:00:00.000Z',
   data: { items: [1, 2, 3] },
 }
@@ -29,7 +29,8 @@ describe('loadFixtures', () => {
     expect(summaries[0]).toMatchObject({
       id: './cart.json',
       name: 'cart with 50 items',
-      queryKey: ['cart', { userId: 7 }],
+      target: { kind: 'key', key: ['cart', { userId: 7 }] },
+      label: '["cart",{"userId":7}]',
     })
     expect(summaries[0].byteLength).toBeGreaterThan(0)
   })
@@ -57,7 +58,7 @@ describe('loadFixtures', () => {
     expect(summaries).toHaveLength(1)
     expect(problems).toHaveLength(1)
     expect(problems[0].id).toBe('./bad.json')
-    expect(problems[0].reason).toMatch(/queryKey must be an array/)
+    expect(problems[0].reason).toMatch(/missing target/)
   })
 
   test('one broken module does not lose the rest', () => {

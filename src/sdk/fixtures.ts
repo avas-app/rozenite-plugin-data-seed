@@ -1,6 +1,7 @@
 import type { BundledFixture, FixtureProblem } from '../shared/types'
 import { parseFixture } from '../shared/fixture'
 import type { Fixture } from '../shared/fixture'
+import { formatRef } from '../shared/target'
 import { approximateSize } from './serialize'
 
 /**
@@ -10,7 +11,7 @@ import { approximateSize } from './serialize'
  * directory:
  *
  * ```ts
- * useQuerySeeder(queryClient, {
+ * useSeeder({ queryClient,
  *   fixtures: require.context('./seeds', false, /\.json$/),
  * })
  * ```
@@ -60,7 +61,8 @@ export function loadFixtures(source: FixtureSource | undefined): LoadedFixtures 
       summaries.push({
         id,
         name: fixture.name,
-        queryKey: fixture.queryKey,
+        target: fixture.target,
+        label: formatRef(fixture.target),
         savedAt: fixture.savedAt,
         byteLength: approximateSize(fixture.data),
       })

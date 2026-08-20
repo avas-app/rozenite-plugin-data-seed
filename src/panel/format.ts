@@ -1,4 +1,4 @@
-import type { QuerySnapshot, SerializedPayload } from '../shared/types'
+import type { SerializedPayload, TargetSnapshot } from '../shared/types'
 
 export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'seeded'
 
@@ -50,18 +50,18 @@ export function summarize(payload: SerializedPayload | undefined): string {
   }
 }
 
-export function queryTone(query: QuerySnapshot): Tone {
-  if (query.seeded) return 'seeded'
-  if (query.status === 'error') return 'danger'
-  if (query.fetchStatus === 'fetching') return 'warning'
-  if (query.status === 'success') return 'success'
+export function targetTone(target: TargetSnapshot): Tone {
+  if (target.seeded) return 'seeded'
+  if (target.status === 'error') return 'danger'
+  if (target.fetchStatus === 'fetching') return 'warning'
+  if (target.status === 'success') return 'success'
   return 'neutral'
 }
 
-export function statusLabel(query: QuerySnapshot): string {
-  if (query.fetchStatus === 'fetching') return 'fetching'
-  if (query.fetchStatus === 'paused') return 'paused'
-  return query.status
+export function statusLabel(target: TargetSnapshot): string {
+  if (target.fetchStatus === 'fetching') return 'fetching'
+  if (target.fetchStatus === 'paused') return 'paused'
+  return target.status
 }
 
 const TONE_TEXT: Record<Tone, string> = {

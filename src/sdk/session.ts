@@ -1,18 +1,22 @@
 import type {
+  AdapterInfo,
   BundledFixture,
   Capabilities,
   FixtureProblem,
-  QuerySnapshot,
+  TargetSnapshot,
+  SeedMeta,
   SeedSnapshot,
   SerializedPayload,
   Snapshot,
   SchemaSummary,
   SourceFrame,
 } from '../shared/types'
+import { splitTargetId, targetId } from '../shared/types'
 import type { LoadedFixtures } from './fixtures'
 import type { Fixture } from '../shared/fixture'
 import type { SchemaEntry } from '../shared/schema'
-import { findByPattern } from '../shared/schema'
+import type { SeedTarget, TargetRef } from '../shared/target'
+import { findByTarget, formatRef } from '../shared/target'
 import { approximateSize, serialize } from './serialize'
 
 /**
@@ -22,68 +26,154 @@ import { approximateSize, serialize } from './serialize'
  * be closed and reopened, or reload itself, and seeds must survive that. A seed
  * that vanished because you refreshed the inspector would be worse than no seed
  * at all, because you would not notice.
+ *
+ * It is also the only place that knows more than one adapter exists. Adapters
+ * register themselves, own their identity scheme, and read their own seeds; the
+ * session routes between them and owns nothing transport-specific.
  */
 
 export type Seed = {
-  queryKey: readonly unknown[]
+  target: SeedTarget
   /** The value handed back to the app, already plain JSON from the panel. */
   data: unknown
+  /** Transport detail an adapter may read, such as an HTTP status. */
+  meta?: SeedMeta
   appliedAt: number
 }
 
 /**
- * The cache operations the session needs, supplied by `instrumentClient`.
+ * An adapter's view of its own seeds.
  *
- * Keeping these behind an interface is what lets the session be tested without
- * a real `QueryClient`, and keeps every TanStack-shaped assumption in one file.
+ * Two access patterns, because the adapters genuinely differ: React Query looks
+ * up a resolved `queryHash` on every option resolution and needs a single Map
+ * hit with no allocation, while the HTTP adapter has to match an observed URL
+ * against every stored *pattern* and therefore scans. Requests are orders of
+ * magnitude rarer than renders, so the scan is not on a hot path.
  */
-export type SeedDriver = {
-  /** Resolves a key to the hash TanStack itself would compute for it. */
-  hashKey: (queryKey: readonly unknown[]) => string
-  listQueries: () => QuerySnapshot[]
-  /** Reads one query's current data, unclipped, for the panel's editor. */
-  readData: (queryHash: string) => SerializedPayload
+export type SeedReader = {
+  get: (identity: string) => Seed | undefined
+  entries: () => Array<[string, Seed]>
+  readonly size: number
+}
+
+/**
+ * One way of seeding, contributed by `adapters/*`.
+ *
+ * `push` and `invalidate` are optional on purpose. They describe a *cache* —
+ * write a value in now, force a real fetch when the seed is withdrawn — and the
+ * HTTP adapter has neither. It only intercepts, so its seed takes effect on the
+ * next request and withdrawing it needs no cleanup. Making them optional is
+ * what keeps that honest rather than stubbing them out.
+ */
+export type SeedAdapter = {
+  id: string
+  label: string
+  /** True when seeds survive refetching rather than being one-shot writes. */
+  intercept: boolean
+  /** True when targets can be listed before anything has used them. */
+  enumerable: boolean
+  /**
+   * This adapter's stable identity for a ref, or null when it cannot address
+   * it — which is how a ref is routed to the adapter that owns it.
+   */
+  identify: (ref: TargetRef) => string | null
+  listTargets: () => TargetSnapshot[]
+  /** Reads one target's current data, unclipped, for the panel's editor. */
+  readData: (identity: string) => SerializedPayload
   /** Writes a seed into the cache immediately and stops any in-flight fetch. */
-  push: (queryKey: readonly unknown[], data: unknown) => void
-  /** Forces a real refetch, used after a seed is withdrawn. */
-  invalidate: (queryKey: readonly unknown[]) => void
+  push?: (ref: TargetRef, data: unknown) => void
+  /** Forces a real fetch, used after a seed is withdrawn. */
+  invalidate?: (ref: TargetRef) => void
 }
 
 export type SessionSink = {
-  queries: (queries: QuerySnapshot[]) => void
+  targets: (targets: TargetSnapshot[]) => void
   seeds: (seeds: SeedSnapshot[]) => void
   fixtures: (fixtures: BundledFixture[], problems: FixtureProblem[]) => void
+  capabilities: (capabilities: Capabilities) => void
 }
 
 /** Coalescing window for cache events. */
 const FLUSH_MS = 100
 
 export class Session {
-  #seeds = new Map<string, Seed>()
-  #driver: SeedDriver | null = null
+  /** adapter id -> identity -> seed. Nested so an adapter reads only its own. */
+  #seeds = new Map<string, Map<string, Seed>>()
+  #adapters = new Map<string, SeedAdapter>()
   #sink: SessionSink | null = null
-  #capabilities: Capabilities = {
-    intercept: false,
-    fixtures: false,
-    schemas: false,
-  }
   #fixtures: LoadedFixtures = { summaries: [], problems: [], byId: new Map() }
   #frames: SourceFrame[] = []
   #schemas: SchemaEntry[] = []
+  #hasFixtures = false
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #disposed = false
 
-  // ---- wiring ----
+  // ---- adapters ----
 
   /**
-   * Capabilities are merged rather than replaced: interception is discovered by
-   * `instrumentClient`, fixtures are supplied by the hook, and neither should
-   * be able to clear the other's finding by attaching later.
+   * Registers an adapter and returns the function that removes it.
+   *
+   * Seeds are deliberately *not* dropped on unregister. Fast Refresh remounts
+   * the hook, which disposes and re-instruments; dropping seeds there would
+   * silently revert the app to live data on every save.
    */
-  attachDriver(driver: SeedDriver | null, capabilities: Partial<Capabilities>): void {
-    this.#driver = driver
-    this.#capabilities = { ...this.#capabilities, ...capabilities }
+  registerAdapter(adapter: SeedAdapter): () => void {
+    this.#adapters.set(adapter.id, adapter)
+    if (!this.#seeds.has(adapter.id)) this.#seeds.set(adapter.id, new Map())
+    this.#emitCapabilities()
+    this.scheduleFlush()
+    return () => {
+      if (this.#adapters.get(adapter.id) === adapter) {
+        this.#adapters.delete(adapter.id)
+        this.#emitCapabilities()
+      }
+    }
   }
+
+  /** The seed view handed to an adapter at construction. */
+  seedReader(adapterId: string): SeedReader {
+    if (!this.#seeds.has(adapterId)) this.#seeds.set(adapterId, new Map())
+    const map = this.#seeds.get(adapterId) as Map<string, Seed>
+    return {
+      get: (identity) => map.get(identity),
+      entries: () => Array.from(map.entries()),
+      get size() {
+        return map.size
+      },
+    }
+  }
+
+  get adapters(): AdapterInfo[] {
+    return Array.from(this.#adapters.values(), (adapter) => ({
+      id: adapter.id,
+      label: adapter.label,
+      intercept: adapter.intercept,
+      enumerable: adapter.enumerable,
+    }))
+  }
+
+  /**
+   * Finds the adapter that can address a ref.
+   *
+   * Explicit `adapter` wins; otherwise the first that claims it. Kinds do not
+   * overlap between the current adapters, so the search is unambiguous today —
+   * `adapter` exists for when SWR lands and two of them answer to `key`.
+   */
+  #resolve(target: SeedTarget): { adapter: SeedAdapter; identity: string } | null {
+    if (target.adapter) {
+      const adapter = this.#adapters.get(target.adapter)
+      if (!adapter) return null
+      const identity = adapter.identify(target.ref)
+      return identity === null ? null : { adapter, identity }
+    }
+    for (const adapter of this.#adapters.values()) {
+      const identity = adapter.identify(target.ref)
+      if (identity !== null) return { adapter, identity }
+    }
+    return null
+  }
+
+  // ---- wiring ----
 
   setFrames(frames: SourceFrame[]): void {
     this.#frames = frames
@@ -91,12 +181,16 @@ export class Session {
 
   setSchemas(entries: SchemaEntry[]): void {
     this.#schemas = entries
-    this.#capabilities = { ...this.#capabilities, schemas: entries.length > 0 }
+    this.#emitCapabilities()
   }
 
-  /** The schema for one key, or null when nothing matches it. */
-  schemaFor(queryKey: unknown[]): unknown | null {
-    return findByPattern(this.#schemas, queryKey)?.schema ?? null
+  /** The schema for one target, or null when nothing matches it. */
+  schemaFor(ref: TargetRef): unknown | null {
+    return findByTarget(this.#schemas, ref)?.schema ?? null
+  }
+
+  schemaEntryFor(ref: TargetRef): SchemaEntry | null {
+    return findByTarget(this.#schemas, ref)
   }
 
   get schemaSummaries(): SchemaSummary[] {
@@ -108,9 +202,9 @@ export class Session {
 
   setFixtures(fixtures: LoadedFixtures): void {
     this.#fixtures = fixtures
-    this.#capabilities = { ...this.#capabilities, fixtures: true }
-    const sink = this.#sink
-    if (sink) sink.fixtures(fixtures.summaries, fixtures.problems)
+    this.#hasFixtures = true
+    this.#emitCapabilities()
+    this.#sink?.fixtures(fixtures.summaries, fixtures.problems)
   }
 
   readFixture(id: string): SerializedPayload {
@@ -127,37 +221,15 @@ export class Session {
   }
 
   get capabilities(): Capabilities {
-    return this.#capabilities
+    return {
+      adapters: this.adapters,
+      fixtures: this.#hasFixtures,
+      schemas: this.#schemas.length > 0,
+    }
   }
 
-  /** Everything below exists for the agent surface, which addresses by key. */
-
-  hashKey(queryKey: readonly unknown[]): string | null {
-    return this.#driver?.hashKey(queryKey) ?? null
-  }
-
-  listQueries(): QuerySnapshot[] {
-    return this.#driver?.listQueries() ?? []
-  }
-
-  /** Resolves a fixture by id first, then by exact name. */
-  findFixture(reference: string): Fixture | null {
-    const byId = this.#fixtures.byId.get(reference)
-    if (byId) return byId
-    const summary = this.#fixtures.summaries.find((item) => item.name === reference)
-    return summary ? (this.#fixtures.byId.get(summary.id) ?? null) : null
-  }
-
-  schemaEntryFor(queryKey: unknown[]): SchemaEntry | null {
-    return findByPattern(this.#schemas, queryKey)
-  }
-
-  /** Clears by key rather than hash, since a caller writes keys, not hashes. */
-  clearByKey(queryKey: readonly unknown[]): boolean {
-    const hash = this.hashKey(queryKey)
-    if (!hash || !this.#seeds.has(hash)) return false
-    this.clear(hash)
-    return true
+  #emitCapabilities(): void {
+    this.#sink?.capabilities(this.capabilities)
   }
 
   attachSink(sink: SessionSink | null): void {
@@ -169,64 +241,130 @@ export class Session {
     if (this.#flushTimer) clearTimeout(this.#flushTimer)
     this.#flushTimer = null
     this.#sink = null
-    this.#driver = null
+    this.#adapters.clear()
     this.#seeds.clear()
     this.#fixtures = { summaries: [], problems: [], byId: new Map() }
     this.#schemas = []
   }
 
-  // ---- seed registry (read by the interceptor on every query resolution) ----
+  // ---- targets ----
 
-  /**
-   * Hot path: called for every option resolution TanStack performs, which is
-   * several times per render for a busy screen. A plain `Map` lookup is the
-   * entire cost, which is why seeds are keyed by hash rather than matched.
-   */
-  getSeed(queryHash: string): Seed | undefined {
-    return this.#seeds.get(queryHash)
+  listTargets(): TargetSnapshot[] {
+    const all: TargetSnapshot[] = []
+    for (const adapter of this.#adapters.values()) {
+      all.push(...adapter.listTargets())
+    }
+    return all
   }
+
+  /** Resolves a ref the caller wrote to the id the panel and seeds use. */
+  identify(target: SeedTarget): string | null {
+    const resolved = this.#resolve(target)
+    return resolved ? targetId(resolved.adapter.id, resolved.identity) : null
+  }
+
+  // ---- seeds ----
 
   get seedCount(): number {
-    return this.#seeds.size
+    let total = 0
+    for (const map of this.#seeds.values()) total += map.size
+    return total
   }
 
-  apply(queryKey: readonly unknown[], data: unknown): void {
-    const driver = this.#driver
-    if (!driver) return
+  /**
+   * Applies a seed, returning whether it will survive refetching.
+   *
+   * Null means no adapter could address the target — a caller asking for an
+   * HTTP route with no HTTP adapter installed, which is worth reporting rather
+   * than silently accepting.
+   */
+  apply(
+    target: SeedTarget,
+    data: unknown,
+    meta?: SeedMeta,
+  ): { id: string; persistent: boolean } | null {
+    const resolved = this.#resolve(target)
+    if (!resolved) return null
+    const { adapter, identity } = resolved
 
-    const queryHash = driver.hashKey(queryKey)
-    this.#seeds.set(queryHash, { queryKey, data, appliedAt: Date.now() })
+    const stored: SeedTarget = { adapter: adapter.id, ref: target.ref }
+    this.#seedsFor(adapter.id).set(identity, {
+      target: stored,
+      data,
+      meta,
+      appliedAt: Date.now(),
+    })
 
     // Register before pushing: `push` writes through the cache, which triggers
     // the subscription and re-resolves options. If the seed were not in the map
     // yet, that pass would miss it and the very first refetch would win.
-    driver.push(queryKey, data)
+    adapter.push?.(target.ref, data)
     this.flush()
+    return { id: targetId(adapter.id, identity), persistent: adapter.intercept }
   }
 
-  clear(queryHash: string): void {
-    const seed = this.#seeds.get(queryHash)
-    if (!seed) return
-    this.#seeds.delete(queryHash)
-    // Withdrawing a seed leaves stale fake data sitting in the cache, so the
-    // query has to go back to the network to become honest again.
-    this.#driver?.invalidate(seed.queryKey)
+  /** Clears by the composed id the panel holds. */
+  clear(id: string): boolean {
+    const split = splitTargetId(id)
+    if (!split) return false
+    const map = this.#seeds.get(split.adapter)
+    const seed = map?.get(split.identity)
+    if (!map || !seed) return false
+    map.delete(split.identity)
+    // Withdrawing a seed leaves stale fake data sitting in a cache, so the
+    // target has to go back to the network to become honest again. Adapters
+    // that only intercept have nothing to undo.
+    this.#adapters.get(split.adapter)?.invalidate?.(seed.target.ref)
     this.flush()
+    return true
   }
 
-  clearAll(): void {
-    const seeds = Array.from(this.#seeds.values())
-    this.#seeds.clear()
-    for (const seed of seeds) this.#driver?.invalidate(seed.queryKey)
-    this.flush()
+  /** Clears by the target a caller wrote, since agents address refs, not ids. */
+  clearByTarget(target: SeedTarget): boolean {
+    const id = this.identify(target)
+    return id ? this.clear(id) : false
   }
 
-  readData(queryHash: string): SerializedPayload {
+  clearAll(): number {
+    let cleared = 0
+    for (const [adapterId, map] of this.#seeds) {
+      const adapter = this.#adapters.get(adapterId)
+      for (const seed of map.values()) {
+        adapter?.invalidate?.(seed.target.ref)
+        cleared += 1
+      }
+      map.clear()
+    }
+    this.flush()
+    return cleared
+  }
+
+  findSeed(id: string): Seed | undefined {
+    const split = splitTargetId(id)
+    return split ? this.#seeds.get(split.adapter)?.get(split.identity) : undefined
+  }
+
+  readData(id: string): SerializedPayload {
     // Prefer the seed itself: what you opened for editing should be what you
     // last applied, not the cache's copy, which an app mutation may have moved.
-    const seed = this.#seeds.get(queryHash)
+    const seed = this.findSeed(id)
     if (seed) return serialize(seed.data)
-    return this.#driver?.readData(queryHash) ?? { kind: 'undefined' }
+    const split = splitTargetId(id)
+    if (!split) return { kind: 'undefined' }
+    return (
+      this.#adapters.get(split.adapter)?.readData(split.identity) ?? {
+        kind: 'undefined',
+      }
+    )
+  }
+
+  #seedsFor(adapterId: string): Map<string, Seed> {
+    let map = this.#seeds.get(adapterId)
+    if (!map) {
+      map = new Map()
+      this.#seeds.set(adapterId, map)
+    }
+    return map
   }
 
   // ---- snapshots ----
@@ -234,31 +372,38 @@ export class Session {
   snapshot(): Snapshot {
     return {
       frames: this.#frames,
-      queries: this.#driver?.listQueries() ?? [],
+      targets: this.listTargets(),
       seeds: this.seedList(),
       fixtures: this.#fixtures.summaries,
       fixtureProblems: this.#fixtures.problems,
       schemas: this.schemaSummaries,
-      capabilities: this.#capabilities,
+      capabilities: this.capabilities,
     }
   }
 
   seedList(): SeedSnapshot[] {
-    return Array.from(this.#seeds.entries(), ([queryHash, seed]) => ({
-      queryHash,
-      // Copied to a mutable array: the wire contract is plain JSON, and a
-      // `readonly` type does not survive the bridge in any meaningful sense.
-      queryKey: [...seed.queryKey],
-      appliedAt: seed.appliedAt,
-      byteLength: approximateSize(seed.data),
-    }))
+    const list: SeedSnapshot[] = []
+    for (const [adapterId, map] of this.#seeds) {
+      for (const [identity, seed] of map) {
+        list.push({
+          id: targetId(adapterId, identity),
+          adapter: adapterId,
+          ref: seed.target.ref,
+          label: formatRef(seed.target.ref),
+          appliedAt: seed.appliedAt,
+          byteLength: approximateSize(seed.data),
+          meta: seed.meta,
+        })
+      }
+    }
+    return list
   }
 
   /**
    * Schedules a push to the panel.
    *
    * Cache events arrive in bursts — a single screen mount can produce dozens
-   * across a few milliseconds — and each flush walks the whole cache. Coalescing
+   * across a few milliseconds — and each flush walks every adapter. Coalescing
    * turns that burst into one message.
    */
   scheduleFlush(): void {
@@ -272,9 +417,16 @@ export class Session {
   flush(): void {
     if (this.#disposed) return
     const sink = this.#sink
-    const driver = this.#driver
-    if (!sink || !driver) return
-    sink.queries(driver.listQueries())
+    if (!sink) return
+    sink.targets(this.listTargets())
     sink.seeds(this.seedList())
+  }
+
+  /** Resolves a fixture by id first, then by exact name. */
+  findFixture(reference: string): Fixture | null {
+    const byId = this.#fixtures.byId.get(reference)
+    if (byId) return byId
+    const summary = this.#fixtures.summaries.find((item) => item.name === reference)
+    return summary ? (this.#fixtures.byId.get(summary.id) ?? null) : null
   }
 }

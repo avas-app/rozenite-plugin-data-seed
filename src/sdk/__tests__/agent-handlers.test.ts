@@ -2,21 +2,22 @@ import { describe, expect, test } from 'bun:test'
 import { QueryClient } from '@tanstack/react-query'
 
 import * as handlers from '../agent-handlers'
-import type { QueryClientLike } from '../instrument'
-import { instrumentClient } from '../instrument'
+import type { QueryClientLike } from '../adapters/react-query'
+import { installReactQueryAdapter } from '../adapters/react-query'
+import { keyTarget } from '../../shared/target'
 import { loadFixtures } from '../fixtures'
 import { Session } from '../session'
 
 const CART = {
-  version: 1,
+  version: 2,
   name: 'cart with 50 items',
-  queryKey: ['cart'],
+  target: ['cart'],
   savedAt: '2026-08-19T10:00:00.000Z',
   data: { items: [1, 2, 3] },
 }
 
 const SCHEMA = {
-  pattern: ['todos'],
+  pattern: { kind: 'key' as const, key: ['todos'] },
   type: 'Todo[]',
   schema: {
     type: 'array',
@@ -34,14 +35,14 @@ function setup({ instrument = true } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const session = new Session()
   const dispose = instrument
-    ? instrumentClient(client as unknown as QueryClientLike, session)
+    ? installReactQueryAdapter(client as unknown as QueryClientLike, session)
     : () => {}
   session.setFixtures(loadFixtures({ './cart.json': CART }))
   session.setSchemas([SCHEMA])
   return { client, session, dispose }
 }
 
-describe('list-queries / read-query', () => {
+describe('list-targets / read-target', () => {
   test('summarises values instead of returning them', async () => {
     const { client, session, dispose } = setup()
     await client.fetchQuery({
@@ -49,7 +50,7 @@ describe('list-queries / read-query', () => {
       queryFn: async () => [{ id: 1 }, { id: 2 }],
     })
 
-    const { items } = handlers.listQueries(session)
+    const { items } = handlers.listTargets(session)
     expect(items).toHaveLength(1)
     expect(items[0].summary).toBe('Array(2)')
     expect(items[0].bytes).toBeGreaterThan(0)
@@ -62,18 +63,18 @@ describe('list-queries / read-query', () => {
     await client.fetchQuery({ queryKey: ['todos'], queryFn: async () => [] })
     await client.fetchQuery({ queryKey: ['users'], queryFn: async () => [] })
 
-    expect(handlers.listQueries(session, { search: 'todo' }).items).toHaveLength(1)
-    expect(handlers.listQueries(session, { limit: 1 }).truncated).toBe(true)
-    expect(handlers.listQueries(session, { onlySeeded: true }).items).toHaveLength(0)
+    expect(handlers.listTargets(session, { search: 'todo' }).items).toHaveLength(1)
+    expect(handlers.listTargets(session, { limit: 1 }).truncated).toBe(true)
+    expect(handlers.listTargets(session, { onlySeeded: true }).items).toHaveLength(0)
 
-    session.apply(['todos'], [])
-    expect(handlers.listQueries(session, { onlySeeded: true }).items).toHaveLength(1)
+    session.apply(keyTarget(['todos']), [])
+    expect(handlers.listTargets(session, { onlySeeded: true }).items).toHaveLength(1)
     dispose()
   })
 
   test('an absent query is a normal answer, not an error', () => {
     const { session, dispose } = setup()
-    const result = handlers.readQuery(session, { queryKey: ['nope'] })
+    const result = handlers.readTarget(session, { queryKey: ['nope'] })
     expect(result.found).toBe(false)
     expect(result.seeded).toBe(false)
     dispose()
@@ -119,7 +120,7 @@ describe('fixtures', () => {
   test('applies by name or by id', () => {
     const { client, session, dispose } = setup()
     const byName = handlers.applyFixture(session, { fixture: 'cart with 50 items' })
-    expect(byName.queryKey).toEqual(['cart'])
+    expect(byName.label).toBe('["cart"]')
     expect(client.getQueryData<{ items: number[] }>(['cart'])).toEqual({
       items: [1, 2, 3],
     })
@@ -179,10 +180,10 @@ describe('generate-seed', () => {
     dispose()
   })
 
-  test('a key with no schema says how to add one', () => {
+  test('a target with no schema says how to add one', () => {
     const { session, dispose } = setup()
     expect(() => handlers.generateSeed(session, { queryKey: ['nope'] })).toThrow(
-      /query-seed extract/,
+      /data-seed extract/,
     )
     dispose()
   })

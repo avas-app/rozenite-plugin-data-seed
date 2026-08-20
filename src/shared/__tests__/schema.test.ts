@@ -1,54 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-  SCHEMAS_VERSION,
-  findByPattern,
-  matchesPattern,
-  parseSchemasFile,
-} from '../schema'
-
-describe('matchesPattern', () => {
-  test('matches exactly', () => {
-    expect(matchesPattern(['todos'], ['todos'])).toBe(true)
-    expect(matchesPattern(['todos'], ['users'])).toBe(false)
-  })
-
-  test('* covers a single element', () => {
-    expect(matchesPattern(['user', '*'], ['user', 7])).toBe(true)
-    expect(matchesPattern(['user', '*'], ['user', 'me'])).toBe(true)
-  })
-
-  test('length must match, so a list pattern cannot swallow a detail route', () => {
-    expect(matchesPattern(['todos'], ['todos', 'detail', 1])).toBe(false)
-    expect(matchesPattern(['user', '*'], ['user'])).toBe(false)
-  })
-
-  test('object elements compare structurally', () => {
-    expect(matchesPattern([{ a: 1 }], [{ a: 1 }])).toBe(true)
-    expect(matchesPattern([{ a: 1 }], [{ a: 2 }])).toBe(false)
-  })
-})
-
-describe('findByPattern', () => {
-  const entries = [
-    { pattern: ['user', '*'], type: 'User' },
-    { pattern: ['user', 7], type: 'AdminUser' },
-    { pattern: ['todos'], type: 'Todos' },
-  ]
-
-  test('an exact pattern beats a wildcard regardless of order', () => {
-    expect(findByPattern(entries, ['user', 7])?.type).toBe('AdminUser')
-    expect(findByPattern([...entries].reverse(), ['user', 7])?.type).toBe('AdminUser')
-  })
-
-  test('falls back to the wildcard for other keys', () => {
-    expect(findByPattern(entries, ['user', 9])?.type).toBe('User')
-  })
-
-  test('returns null when nothing matches', () => {
-    expect(findByPattern(entries, ['nope'])).toBeNull()
-  })
-})
+import { SCHEMAS_VERSION, parseSchemasFile, serializeSchemaEntry } from '../schema'
 
 describe('parseSchemasFile', () => {
   test('accepts a well-formed file', () => {
@@ -60,6 +12,36 @@ describe('parseSchemasFile', () => {
     expect(file.entries).toEqual([])
   })
 
+  test('reads both pattern forms', () => {
+    const { entries } = parseSchemasFile({
+      version: SCHEMAS_VERSION,
+      entries: [
+        { pattern: ['user', '*'], type: 'User', schema: {} },
+        { pattern: 'GET /api/users/*', type: 'User', schema: {} },
+      ],
+    })
+    expect(entries[0].pattern).toEqual({ kind: 'key', key: ['user', '*'] })
+    expect(entries[1].pattern).toEqual({
+      kind: 'route',
+      method: 'GET',
+      glob: '/api/users/*',
+    })
+  })
+
+  test('a v1 file still reads, since its array patterns are unchanged', () => {
+    const { entries } = parseSchemasFile({
+      version: 1,
+      entries: [{ pattern: ['todos'], type: 'Todo[]', schema: {} }],
+    })
+    expect(entries[0].pattern).toEqual({ kind: 'key', key: ['todos'] })
+  })
+
+  test('names the offending entry rather than failing anonymously', () => {
+    expect(() =>
+      parseSchemasFile({ entries: [{ pattern: ['ok'] }, { pattern: 7 }] }),
+    ).toThrow(/entry 1/)
+  })
+
   test('rejects anything without entries', () => {
     expect(() => parseSchemasFile({})).toThrow(/entries array/)
     expect(() => parseSchemasFile(null)).toThrow(/JSON object/)
@@ -69,5 +51,16 @@ describe('parseSchemasFile', () => {
     expect(() =>
       parseSchemasFile({ version: SCHEMAS_VERSION + 1, entries: [] }),
     ).toThrow(/newer plugin/)
+  })
+
+  test('round-trips a pattern back to its authored form', () => {
+    const { entries } = parseSchemasFile({
+      entries: [
+        { pattern: ['todos'], type: 'T', schema: {} },
+        { pattern: 'GET /api/todos', type: 'T', schema: {} },
+      ],
+    })
+    expect(serializeSchemaEntry(entries[0]).pattern).toEqual(['todos'])
+    expect(serializeSchemaEntry(entries[1]).pattern).toBe('GET /api/todos')
   })
 })

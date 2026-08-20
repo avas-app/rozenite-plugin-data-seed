@@ -6,10 +6,11 @@ import {
   createFixture,
   isFixtureFile,
   parseFixture,
-  sameQueryKey,
+  sameTarget,
   serializeFixture,
   toFileName,
 } from '../fixture'
+import { keyTarget, routeTarget } from '../target'
 
 describe('toFileName', () => {
   test('slugs a display name', () => {
@@ -34,7 +35,7 @@ describe('round trip', () => {
   test('serialize then parse preserves the fixture', () => {
     const fixture = createFixture(
       'cart',
-      ['cart', { userId: 7 }],
+      keyTarget(['cart', { userId: 7 }]).ref,
       { items: [1, 2, 3], total: null },
       '2026-08-19T10:00:00.000Z',
     )
@@ -43,7 +44,7 @@ describe('round trip', () => {
   })
 
   test('serialized output is diff-friendly', () => {
-    const text = serializeFixture(createFixture('a', ['a'], { b: 1 }, 'ts'))
+    const text = serializeFixture(createFixture('a', keyTarget(['a']).ref, { b: 1 }, 'ts'))
     expect(text.endsWith('\n')).toBe(true)
     expect(text).toContain('\n  "name": "a"')
   })
@@ -53,8 +54,11 @@ describe('parseFixture', () => {
   test('names the file in every error', () => {
     expect(() => parseFixture('broken.json', '{oops')).toThrow(/^broken\.json:/)
     expect(() => parseFixture('a.json', '[]')).toThrow(/expected a JSON object/)
-    expect(() => parseFixture('a.json', '{"data":1}')).toThrow(/queryKey must be an array/)
-    expect(() => parseFixture('a.json', '{"queryKey":[]}')).toThrow(/missing data/)
+    expect(() => parseFixture('a.json', '{"data":1}')).toThrow(/missing target/)
+    expect(() => parseFixture('a.json', '{"target":[]}')).toThrow(/missing data/)
+    expect(() => parseFixture('a.json', '{"target":{"kind":"route"},"data":1}')).toThrow(
+      /route target needs a url/,
+    )
   })
 
   test('errors are typed so the UI can distinguish them', () => {
@@ -64,30 +68,50 @@ describe('parseFixture', () => {
   test('refuses a file from a newer plugin instead of silently misreading it', () => {
     const text = JSON.stringify({
       version: FIXTURE_VERSION + 1,
-      queryKey: ['a'],
+      target: ['a'],
       data: {},
     })
     expect(() => parseFixture('a.json', text)).toThrow(/newer plugin/)
   })
 
   test('accepts a hand-written fixture with only the essentials', () => {
-    const parsed = parseFixture('todos.json', '{"queryKey":["todos"],"data":[]}')
+    const parsed = parseFixture('todos.json', '{"target":["todos"],"data":[]}')
     expect(parsed.name).toBe('todos')
     expect(parsed.version).toBe(FIXTURE_VERSION)
     expect(parsed.data).toEqual([])
   })
 
   test('keeps a null data value rather than treating it as missing', () => {
-    const parsed = parseFixture('a.json', '{"queryKey":["a"],"data":null}')
+    const parsed = parseFixture('a.json', '{"target":["a"],"data":null}')
     expect(parsed.data).toBeNull()
+  })
+
+  test('a v1 fixture still reads, so committed files need no migration', () => {
+    const parsed = parseFixture('a.json', '{"version":1,"queryKey":["a"],"data":[]}')
+    expect(parsed.target).toEqual({ kind: 'key', key: ['a'] })
+  })
+
+  test('reads a route fixture', () => {
+    const parsed = parseFixture(
+      'a.json',
+      '{"target":{"kind":"route","method":"get","url":"/api/a"},"data":[],"meta":{"status":500}}',
+    )
+    expect(parsed.target).toEqual({ kind: 'route', method: 'GET', url: '/api/a' })
+    expect(parsed.meta).toEqual({ status: 500 })
   })
 })
 
-describe('sameQueryKey', () => {
+describe('sameTarget', () => {
   test('matches structurally', () => {
-    expect(sameQueryKey(['user', 7], ['user', 7])).toBe(true)
-    expect(sameQueryKey(['user', 7], ['user', 8])).toBe(false)
-    expect(sameQueryKey(['user'], ['user', undefined as unknown])).toBe(false)
+    const a = keyTarget(['user', 7]).ref
+    expect(sameTarget(a, keyTarget(['user', 7]).ref)).toBe(true)
+    expect(sameTarget(a, keyTarget(['user', 8]).ref)).toBe(false)
+  })
+
+  test('a route and a key are never the same target', () => {
+    expect(
+      sameTarget(keyTarget(['/api/a']).ref, routeTarget('GET', '/api/a').ref),
+    ).toBe(false)
   })
 })
 

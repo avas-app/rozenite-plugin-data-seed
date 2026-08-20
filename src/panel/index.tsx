@@ -8,16 +8,16 @@ import {
 } from '@rozenite/ui'
 import { Loader2, PlugZap } from 'lucide-react'
 
-import { sameQueryKey } from '../shared/fixture'
 import type { GenerateWarning } from '../shared/generate'
 import { generate as generateValue } from '../shared/generate'
 import { describeSchema } from '../shared/describe'
-import { findByPattern } from '../shared/schema'
 import type { SchemaDocument } from '../shared/schema'
+import type { TargetRef } from '../shared/target'
+import { findByTarget, formatRef } from '../shared/target'
 import type { BundledFixture } from '../shared/types'
 import { GenerateBar } from './components/GenerateBar'
 import { FixtureList } from './components/FixtureList'
-import { QueryList } from './components/QueryList'
+import { TargetList } from './components/TargetList'
 import {
   SeedEditor,
   toEditableText,
@@ -25,23 +25,23 @@ import {
 } from './components/SeedEditor'
 import { useProjectRoot } from './fixtures/project-root'
 import { useFixtures } from './fixtures/use-fixtures'
-import { useQuerySeedPanel } from './store'
+import { useSeedPanel } from './store'
 import './globals.css'
 
-const SUBTITLE = 'Push fake data into the TanStack Query cache and make it stick.'
+const SUBTITLE = 'Push fake data into your app and make it stick.'
 
-type Tab = 'queries' | 'fixtures'
+type Tab = 'targets' | 'fixtures'
 
-export default function QuerySeedPanel() {
-  const { state, actions, bridgeReady } = useQuerySeedPanel()
+export default function SeedPanel() {
+  const { state, actions, bridgeReady } = useSeedPanel()
   const fixtures = useFixtures()
   const projectRoot = useProjectRoot(state.frames)
 
-  const [tab, setTab] = useState<Tab>('queries')
+  const [tab, setTab] = useState<Tab>('targets')
   const [filter, setFilter] = useState('')
   const [target, setTarget] = useState<EditorTarget | null>(null)
   // The editor is controlled from here because two independent sources fill it:
-  // a cache read arriving over the bridge, and a fixture read from disk.
+  // a target read arriving over the bridge, and a fixture read from disk.
   const [text, setText] = useState('')
   const [filledFor, setFilledFor] = useState<string | null>(null)
   const [itemCount, setItemCount] = useState(3)
@@ -52,14 +52,12 @@ export default function QuerySeedPanel() {
   const [roll, setRoll] = useState(0)
 
   const incoming =
-    target?.queryHash && state.editorData?.queryHash === target.queryHash
-      ? state.editorData
-      : null
+    target?.id && state.editorData?.id === target.id ? state.editorData : null
 
   useEffect(() => {
-    if (!incoming || filledFor === incoming.queryHash) return
+    if (!incoming || filledFor === incoming.id) return
     setText(toEditableText(incoming.data))
-    setFilledFor(incoming.queryHash)
+    setFilledFor(incoming.id)
   }, [incoming, filledFor])
 
   const incomingFixture =
@@ -77,63 +75,92 @@ export default function QuerySeedPanel() {
   // prompt happens here — at the moment it is required — rather than as a wall
   // in front of a feature that mostly does not need it.
   const saveFixture = useCallback(
-    async (name: string, queryKey: unknown[], data: unknown) => {
+    async (
+      name: string,
+      ref: TargetRef,
+      data: unknown,
+      meta?: { status?: number },
+    ) => {
       if (!fixtures.state.ready && !(await fixtures.actions.connect())) return
-      await fixtures.actions.save(name, queryKey, data)
+      await fixtures.actions.save(name, ref, data, meta)
     },
     [fixtures.actions, fixtures.state.ready],
   )
 
-  const selectQuery = useCallback(
-    (queryHash: string) => {
-      const query = state.queries.find((q) => q.queryHash === queryHash)
-      if (!query) return
-      setTarget({ queryKey: query.queryKey, queryHash, source: 'query' })
-      setText('')
-      setFilledFor(null)
-      setWarnings([])
+  const openEditor = useCallback((next: EditorTarget) => {
+    setTarget(next)
+    setText('')
+    setFilledFor(null)
+    setWarnings([])
+  }, [])
+
+  const selectTarget = useCallback(
+    (id: string) => {
+      const found = state.targets.find((item) => item.id === id)
+      if (!found) return
+      openEditor({
+        ref: found.ref,
+        id,
+        adapter: found.adapter,
+        source: 'target',
+      })
       // Row previews are clipped, so the editor has to ask for the real value.
-      actions.readData(queryHash)
+      actions.readData(id)
     },
-    [actions, state.queries],
+    [actions, openEditor, state.targets],
   )
 
-  // Fixture values come from the app bundle over the bridge, like cache reads,
+  /**
+   * Seeding a route that has never been requested.
+   *
+   * There is no row to select and nothing to read, so the editor opens empty —
+   * which is correct: there is no prior value to start from.
+   */
+  const addRoute = useCallback(
+    (ref: TargetRef) => {
+      openEditor({ ref, id: null, adapter: 'http', source: 'target' })
+      setText('{}')
+      setFilledFor('new-route')
+    },
+    [openEditor],
+  )
+
+  // Fixture values come from the app bundle over the bridge, like target reads,
   // rather than from the browser's filesystem access — which is what lets this
   // work with no folder ever having been chosen.
   const openFixture = useCallback(
     (fixture: BundledFixture) => {
-      setTarget({
-        queryKey: fixture.queryKey,
-        queryHash: null,
+      openEditor({
+        ref: fixture.target,
+        id: null,
+        adapter: '',
         source: 'fixture',
         fixtureName: fixture.name,
         fixtureId: fixture.id,
       })
-      setText('')
-      setFilledFor(null)
-      setWarnings([])
       actions.readFixture(fixture.id)
     },
-    [actions],
+    [actions, openEditor],
   )
 
-  /** The schema summary covering the current key, if any. */
+  /** The schema summary covering the current target, if any. */
   const schemaSummary = useMemo(
-    () => (target ? findByPattern(state.schemas, target.queryKey) : null),
+    () => (target ? findByTarget(state.schemas, target.ref) : null),
     [state.schemas, target],
   )
 
   // Schemas are fetched on demand, so ask as soon as one is known to exist.
   useEffect(() => {
-    if (schemaSummary) actions.readSchema(schemaSummary.pattern)
-  }, [actions, schemaSummary])
+    if (target && schemaSummary) actions.readSchema(target.ref)
+  }, [actions, schemaSummary, target])
 
   const schemaDocument = useMemo(() => {
-    if (!schemaSummary || !state.schema) return null
-    if (!sameQueryKey(state.schema.pattern, schemaSummary.pattern)) return null
+    if (!schemaSummary || !state.schema || !target) return null
+    // The reply names the ref it was asked about; a stale one from the
+    // previously selected target must not fill in for this one.
+    if (formatRef(state.schema.ref) !== formatRef(target.ref)) return null
     return (state.schema.schema as SchemaDocument | null) ?? null
-  }, [schemaSummary, state.schema])
+  }, [schemaSummary, state.schema, target])
 
   const shape = useMemo(() => {
     if (!schemaDocument || !schemaSummary) return null
@@ -148,28 +175,43 @@ export default function QuerySeedPanel() {
   const runGenerate = useCallback(() => {
     if (!schemaDocument || !target) return
     const result = generateValue(schemaDocument, {
-      seed: `${JSON.stringify(target.queryKey)}:${roll}`,
+      seed: `${formatRef(target.ref)}:${roll}`,
       arrayLength: itemCount,
       variant: variant ?? undefined,
     })
     setText(JSON.stringify(result.value, null, 2))
     setWarnings(result.warnings)
     setRoll((current) => current + 1)
-    // Marks the editor as filled so a cache read still in flight does not land
-    // on top of what was just generated.
-    setFilledFor(target.queryHash ?? target.fixtureId ?? 'generated')
+    // Marks the editor as filled so a read still in flight does not land on top
+    // of what was just generated.
+    setFilledFor(target.id ?? target.fixtureId ?? 'generated')
   }, [itemCount, roll, schemaDocument, target, variant])
 
-  // Resolved by key rather than hash: a fixture can target a query that has
-  // never been fetched, so it has no hash to match on.
+  // Resolved by ref rather than id: a fixture — or a route rule — can target
+  // something that has never been used, so it has no live id to match on.
   const activeSeed = useMemo(
     () =>
       target
-        ? (state.seeds.find((seed) => sameQueryKey(seed.queryKey, target.queryKey)) ??
-          null)
+        ? (state.seeds.find(
+            (seed) => formatRef(seed.ref) === formatRef(target.ref),
+          ) ?? null)
         : null,
     [state.seeds, target],
   )
+
+  /**
+   * Whether *this* target's adapter can make a seed stick.
+   *
+   * Per-adapter rather than global: patching fetch can fail while the query
+   * client hooks fine, and a single warning covering both would be wrong half
+   * the time.
+   */
+  const intercept = useMemo(() => {
+    const adapterId = target?.adapter || activeSeed?.adapter
+    if (!adapterId) return true
+    const adapter = state.capabilities.adapters.find((item) => item.id === adapterId)
+    return adapter ? adapter.intercept : true
+  }, [activeSeed, state.capabilities.adapters, target])
 
   if (!bridgeReady) {
     return (
@@ -187,13 +229,13 @@ export default function QuerySeedPanel() {
         <EmptyState
           description={
             <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-foreground">
-              {`import { useQuerySeeder } from '@avasapp/rozenite-plugin-query-seed'
+              {`import { useSeeder } from '@avasapp/rozenite-plugin-data-seed'
 
-useQuerySeeder(queryClient)`}
+useSeeder({ queryClient, http: true })`}
             </pre>
           }
           icon={PlugZap}
-          title="Waiting for an instrumented QueryClient."
+          title="Waiting for an instrumented app."
         />
       </Shell>
     )
@@ -201,7 +243,7 @@ useQuerySeeder(queryClient)`}
 
   const loading =
     target !== null &&
-    filledFor !== (target.source === 'query' ? target.queryHash : target.fixtureId)
+    filledFor !== (target.source === 'target' ? target.id : target.fixtureId)
 
   return (
     <Shell>
@@ -222,10 +264,10 @@ useQuerySeeder(queryClient)`}
         <aside className="flex w-[22rem] shrink-0 flex-col border-r border-border">
           <div className="flex shrink-0 gap-1 border-b border-border p-1">
             <TabButton
-              active={tab === 'queries'}
-              count={state.queries.length}
-              label="Queries"
-              onClick={() => setTab('queries')}
+              active={tab === 'targets'}
+              count={state.targets.length}
+              label="Targets"
+              onClick={() => setTab('targets')}
             />
             <TabButton
               active={tab === 'fixtures'}
@@ -235,13 +277,15 @@ useQuerySeeder(queryClient)`}
             />
           </div>
 
-          {tab === 'queries' ? (
-            <QueryList
+          {tab === 'targets' ? (
+            <TargetList
+              adapters={state.capabilities.adapters}
+              onAddRoute={addRoute}
               onQueryChange={setFilter}
-              onSelect={selectQuery}
-              queries={state.queries}
+              onSelect={selectTarget}
               query={filter}
-              selected={target?.queryHash ?? null}
+              selected={target?.id ?? null}
+              targets={state.targets}
             />
           ) : (
             <FixtureList
@@ -274,13 +318,13 @@ useQuerySeeder(queryClient)`}
               />
             ) : null
           }
-          intercept={state.capabilities.intercept}
+          intercept={intercept}
           loading={loading}
           onApply={actions.apply}
           onChange={setText}
-          onClear={() => activeSeed && actions.clear(activeSeed.queryHash)}
-          onSaveFixture={(name, queryKey, data) =>
-            void saveFixture(name, queryKey, data)
+          onClear={() => activeSeed && actions.clear(activeSeed.id)}
+          onSaveFixture={(name, ref, data, meta) =>
+            void saveFixture(name, ref, data, meta)
           }
           seeded={Boolean(activeSeed)}
           target={target}
@@ -339,7 +383,7 @@ function Header({ children }: { children?: React.ReactNode }) {
   return (
     <PluginHeader>
       <div className="flex min-w-0 flex-col">
-        <PluginHeader.Title>Query Seed</PluginHeader.Title>
+        <PluginHeader.Title>Data Seed</PluginHeader.Title>
         <PluginHeader.Subtitle>{SUBTITLE}</PluginHeader.Subtitle>
       </div>
       <PluginHeader.Actions>

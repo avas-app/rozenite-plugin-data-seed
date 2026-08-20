@@ -1,24 +1,47 @@
 import { useEffect, useRef } from 'react'
 import { useRozeniteDevToolsClient } from '@rozenite/plugin-bridge'
 
-import type { QuerySeedEventMap } from '../shared/types'
+import type { SeedEventMap } from '../shared/types'
 import { PLUGIN_ID } from '../shared/types'
 import type { FixtureSource } from './fixtures'
 import { loadFixtures } from './fixtures'
 import { parseSchemasFile } from '../shared/schema'
-import type { QueryClientLike } from './instrument'
-import { instrumentClient } from './instrument'
+import type { QueryClientLike } from './adapters/react-query'
+import { installReactQueryAdapter } from './adapters/react-query'
+import type { HttpAdapterOptions } from './adapters/http'
+import { installHttpAdapter } from './adapters/http'
 import { captureFrames } from './origin'
-import { useQuerySeedAgentTools } from './use-query-seed-agent-tools'
+import { useSeedAgentTools } from './use-seed-agent-tools'
 import { Session } from './session'
 
-export type QuerySeederOptions = {
+export type SeederOptions = {
+  /**
+   * A TanStack `QueryClient`. Seeds go into the cache and survive refetching.
+   *
+   * Typed structurally, so this package takes no dependency on
+   * `@tanstack/react-query` and works against whatever v5 minor you have.
+   */
+  queryClient?: QueryClientLike | null
+  /**
+   * Intercept `fetch`, so responses can be seeded below whatever data layer
+   * sits above them.
+   *
+   * Worth turning on even when `queryClient` is set: a seeded response still
+   * runs the app's real parsing, transform and error handling on the way up,
+   * where a seeded cache entry bypasses all of it. Pass an object to narrow
+   * what is watched.
+   *
+   * ```ts
+   * useSeeder({ queryClient, http: true })
+   * ```
+   */
+  http?: boolean | HttpAdapterOptions
   /**
    * Fixtures bundled with the app, so everyone who clones the repo sees the
    * same list with no setup:
    *
    * ```ts
-   * useQuerySeeder(queryClient, {
+   * useSeeder({
    *   fixtures: require.context('./seeds', false, /\.json$/),
    * })
    * ```
@@ -28,13 +51,11 @@ export type QuerySeederOptions = {
    */
   fixtures?: FixtureSource
   /**
-   * Schemas extracted from your TypeScript types by `npx query-seed extract`,
+   * Schemas extracted from your TypeScript types by `npx data-seed extract`,
    * so the panel can generate data rather than making you type it:
    *
    * ```ts
-   * useQuerySeeder(queryClient, {
-   *   schemas: require('./query-seed.schemas.json'),
-   * })
+   * useSeeder({ schemas: require('./data-seed.schemas.json') })
    * ```
    */
   schemas?: unknown
@@ -49,13 +70,14 @@ function isDev(): boolean {
 }
 
 /**
- * Lets the DevTools panel put arbitrary data into your TanStack Query cache.
+ * Lets the DevTools panel put arbitrary data into your app.
  *
- * Safe to call unconditionally: it is a no-op outside `__DEV__` and a no-op
- * while `queryClient` is null, so it can sit above the provider that creates it.
+ * Safe to call unconditionally: it is a no-op outside `__DEV__`, and a no-op
+ * while every source is absent, so it can sit above the provider that creates
+ * the query client.
  *
  * ```ts
- * useQuerySeeder(queryClient)
+ * useSeeder({ queryClient, http: true })
  * ```
  *
  * Instrumentation and bridge wiring are deliberately split across two effects.
@@ -63,31 +85,46 @@ function isDev(): boolean {
  * alive independently means active seeds survive a DevTools reload rather than
  * silently reverting to live data underneath you.
  */
-export function useQuerySeeder(
-  queryClient: QueryClientLike | null | undefined,
-  options: QuerySeederOptions = {},
-): void {
-  const { fixtures, schemas, enabled = true } = options
-  const active = enabled && isDev() && Boolean(queryClient)
+export function useSeeder(options: SeederOptions = {}): void {
+  const { queryClient, http, fixtures, schemas, enabled = true } = options
+  const active = enabled && isDev() && Boolean(queryClient || http)
 
   const sessionRef = useRef<Session | null>(null)
 
-  const devToolsClient = useRozeniteDevToolsClient<QuerySeedEventMap>({
+  const devToolsClient = useRozeniteDevToolsClient<SeedEventMap>({
     pluginId: PLUGIN_ID,
   })
 
   // Agent tools read the same session as the panel, and register independently
   // of it — `rozenite agent` works with no DevTools window open, which is what
-  // lets a test put the cache into a known state before driving the UI.
-  useQuerySeedAgentTools({ sessionRef, enabled: active })
+  // lets a test put the app into a known state before driving the UI.
+  useSeedAgentTools({ sessionRef, enabled: active })
+
+  // `http` is commonly written as an inline object literal, which would be a
+  // new value on every render and re-run the effect forever. Only its identity
+  // is unstable; the options inside it are read once at install time.
+  const httpRef = useRef(http)
+  httpRef.current = http
+  const httpEnabled = Boolean(http)
 
   // ---- instrumentation lifecycle (independent of the panel) ----
   useEffect(() => {
-    if (!active || !queryClient) return
+    if (!active) return
 
     const session = new Session()
     sessionRef.current = session
-    const dispose = instrumentClient(queryClient, session)
+    const disposers: Array<() => void> = []
+
+    if (queryClient) {
+      disposers.push(installReactQueryAdapter(queryClient, session))
+    }
+    if (httpEnabled) {
+      const current = httpRef.current
+      disposers.push(
+        installHttpAdapter(session, typeof current === 'object' ? current : {}),
+      )
+    }
+
     // Captured here rather than at module scope: this runs inside the app's own
     // call stack, so the frames above us belong to the consuming project — which
     // is exactly what the panel needs to locate it on disk.
@@ -103,7 +140,7 @@ export function useQuerySeeder(
         // A stale or hand-broken schemas file must not take the panel down with
         // it — everything except generation still works.
         console.warn(
-          `[query-seed] ignoring schemas: ${
+          `[data-seed] ignoring schemas: ${
             error instanceof Error ? error.message : String(error)
           }`,
         )
@@ -111,11 +148,11 @@ export function useQuerySeeder(
     }
 
     return () => {
-      dispose()
+      for (const dispose of disposers.reverse()) dispose()
       session.dispose()
       if (sessionRef.current === session) sessionRef.current = null
     }
-  }, [active, queryClient, fixtures, schemas])
+  }, [active, queryClient, httpEnabled, fixtures, schemas])
 
   // ---- bridge wiring (re-runs whenever the panel attaches or detaches) ----
   useEffect(() => {
@@ -123,10 +160,12 @@ export function useQuerySeeder(
     if (!active || !session || !devToolsClient) return
 
     session.attachSink({
-      queries: (queries) => devToolsClient.send('seed:queries', { queries }),
+      targets: (targets) => devToolsClient.send('seed:targets', { targets }),
       seeds: (seeds) => devToolsClient.send('seed:seeds', { seeds }),
       fixtures: (list, problems) =>
         devToolsClient.send('seed:fixtures', { fixtures: list, problems }),
+      capabilities: (capabilities) =>
+        devToolsClient.send('seed:capabilities', capabilities),
     })
 
     devToolsClient.send('seed:snapshot', session.snapshot())
@@ -135,20 +174,17 @@ export function useQuerySeeder(
       devToolsClient.onMessage('seed:request-snapshot', () => {
         devToolsClient.send('seed:snapshot', session.snapshot())
       }),
-      devToolsClient.onMessage('seed:apply', ({ queryKey, data }) => {
-        session.apply(queryKey, data)
+      devToolsClient.onMessage('seed:apply', ({ target, data, meta }) => {
+        session.apply(target, data, meta)
       }),
-      devToolsClient.onMessage('seed:clear', ({ queryHash }) => {
-        session.clear(queryHash)
+      devToolsClient.onMessage('seed:clear', ({ id }) => {
+        session.clear(id)
       }),
       devToolsClient.onMessage('seed:clear-all', () => {
         session.clearAll()
       }),
-      devToolsClient.onMessage('seed:read-data', ({ queryHash }) => {
-        devToolsClient.send('seed:data', {
-          queryHash,
-          data: session.readData(queryHash),
-        })
+      devToolsClient.onMessage('seed:read-data', ({ id }) => {
+        devToolsClient.send('seed:data', { id, data: session.readData(id) })
       }),
       devToolsClient.onMessage('seed:read-fixture', ({ id }) => {
         devToolsClient.send('seed:fixture-data', {
@@ -156,11 +192,8 @@ export function useQuerySeeder(
           data: session.readFixture(id),
         })
       }),
-      devToolsClient.onMessage('seed:read-schema', ({ pattern }) => {
-        devToolsClient.send('seed:schema', {
-          pattern,
-          schema: session.schemaFor(pattern),
-        })
+      devToolsClient.onMessage('seed:read-schema', ({ ref }) => {
+        devToolsClient.send('seed:schema', { ref, schema: session.schemaFor(ref) })
       }),
     ]
 
@@ -170,5 +203,5 @@ export function useQuerySeeder(
     }
     // `sessionRef.current` is populated by the effect above, which React runs
     // first; `active`/`queryClient` changing re-runs both in order.
-  }, [active, queryClient, devToolsClient])
+  }, [active, queryClient, httpEnabled, devToolsClient])
 }

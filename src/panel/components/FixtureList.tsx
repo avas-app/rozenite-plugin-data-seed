@@ -3,7 +3,7 @@ import { AlertTriangle, FolderOpen, Sprout } from 'lucide-react'
 
 import type { BundledFixture, FixtureProblem } from '../../shared/types'
 import type { FixturesActions, FixturesState } from '../fixtures/use-fixtures'
-import { formatBytes, formatKey } from '../format'
+import { formatBytes } from '../format'
 
 /**
  * Fixtures committed to the consuming repo.
@@ -43,7 +43,8 @@ export function FixtureList({
           gets the same list — no setup on their side.
         </p>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-[11px] text-foreground">
-          {`useQuerySeeder(queryClient, {
+          {`useSeeder({
+  queryClient,
   fixtures: require.context(
     './seeds', false, /\\.json$/
   ),
@@ -58,7 +59,7 @@ export function FixtureList({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {fixtures.length === 0 && problems.length === 0 ? (
           <p className="p-4 text-xs text-muted-foreground">
-            No fixtures yet. Seed a query, then save it from the editor.
+            No fixtures yet. Seed a target, then save it from the editor.
           </p>
         ) : (
           <ul>
@@ -78,7 +79,7 @@ export function FixtureList({
                     </span>
                   </span>
                   <span className="truncate font-mono text-[11px] text-muted-foreground">
-                    {formatKey(fixture.queryKey)} · {formatBytes(fixture.byteLength)}
+                    {fixture.label} · {formatBytes(fixture.byteLength)}
                   </span>
                 </button>
               </li>

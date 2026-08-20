@@ -2,22 +2,26 @@ import { useState } from 'react'
 import { Button, EmptyState, Input } from '@rozenite/ui'
 import { AlertTriangle, MousePointerClick, Save } from 'lucide-react'
 
-import type { SerializedPayload } from '../../shared/types'
-import { formatBytes, formatKey } from '../format'
+import type { SeedMeta, SerializedPayload } from '../../shared/types'
+import type { SeedTarget, TargetRef } from '../../shared/target'
+import { formatRef } from '../../shared/target'
+import { formatBytes } from '../format'
 
 /**
  * What the editor is currently pointed at.
  *
- * A target can come from the cache (where a `queryHash` exists) or from a saved
- * fixture (where it does not, because the query may never have been fetched).
- * Seeding only ever needs the key, so the missing hash costs nothing except the
- * ability to address an existing seed by hash — which is why `seeded` is
- * resolved by the parent against the key instead.
+ * A target can come from a live adapter (where an `id` exists) or from a saved
+ * fixture (where it does not, because the target may never have been used).
+ * Seeding only ever needs the ref, so the missing id costs nothing except the
+ * ability to address an existing seed directly — which is why `seeded` is
+ * resolved by the parent against the ref instead.
  */
 export type EditorTarget = {
-  queryKey: unknown[]
-  queryHash: string | null
-  source: 'query' | 'fixture'
+  ref: TargetRef
+  id: string | null
+  /** Empty when unknown, e.g. a fixture for a target no adapter has seen. */
+  adapter: string
+  source: 'target' | 'fixture'
   /** Fixture name, when the target came from one. */
   fixtureName?: string
   /** Fixture id within the app's require.context, used to read its value. */
@@ -25,15 +29,15 @@ export type EditorTarget = {
 }
 
 /**
- * Raw JSON editing for one query's cache entry.
+ * Raw JSON editing for one target's value.
  *
- * Deliberately a textarea and not a structured form. The point of this slice is
- * that *any* JSON can reach the cache; a form would have to know the shape, and
- * knowing the shape is the job of the generator that comes later.
+ * Deliberately a textarea and not a structured form. The point is that *any*
+ * JSON can be seeded; a form would have to know the shape, and knowing the
+ * shape is the generator's job.
  *
  * Fully controlled — the parent owns the text because two different things fill
- * it (a cache read arriving over the bridge, and a fixture loaded from disk),
- * and having both reach into local state was how the earlier version grew a
+ * it (a read arriving over the bridge, and a fixture loaded from disk), and
+ * having both reach into local state was how the earlier version grew a
  * synchronisation bug.
  */
 export function SeedEditor({
@@ -56,34 +60,47 @@ export function SeedEditor({
   loading: boolean
   truncated: boolean
   seeded: boolean
-  onApply: (queryKey: unknown[], data: unknown) => void
+  onApply: (target: SeedTarget, data: unknown, meta?: SeedMeta) => void
   onClear: () => void
-  onSaveFixture: (name: string, queryKey: unknown[], data: unknown) => void
+  onSaveFixture: (
+    name: string,
+    ref: TargetRef,
+    data: unknown,
+    meta?: SeedMeta,
+  ) => void
   canSaveFixture: boolean
+  /** False when this target's adapter could not be hooked. */
   intercept: boolean
-  /** Rendered above the editor when a schema covers this key. */
+  /** Rendered above the editor when a schema covers this target. */
   generate?: React.ReactNode
 }) {
   const [savingName, setSavingName] = useState<string | null>(null)
+  const [status, setStatus] = useState('200')
 
   if (!target) {
     return (
       <main className="flex min-w-0 flex-1 items-center justify-center">
         <EmptyState
           icon={MousePointerClick}
-          title="Select a query or a fixture to seed it."
+          title="Select a target or a fixture to seed it."
         />
       </main>
     )
   }
 
   const parsed = parse(value)
+  const isRoute = target.ref.kind === 'route'
+  const parsedStatus = Number.parseInt(status, 10)
+  const statusValid = Number.isFinite(parsedStatus) && parsedStatus >= 100 && parsedStatus <= 599
+  const meta: SeedMeta | undefined =
+    isRoute && statusValid && parsedStatus !== 200 ? { status: parsedStatus } : undefined
+  const seedTarget: SeedTarget = { adapter: target.adapter, ref: target.ref }
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         <code className="truncate font-mono text-xs text-foreground">
-          {formatKey(target.queryKey)}
+          {formatRef(target.ref)}
         </code>
         {target.fixtureName ? (
           <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -100,8 +117,9 @@ export function SeedEditor({
       {!intercept ? (
         <p className="flex items-center gap-2 border-b border-border bg-warning/10 px-3 py-2 text-[11px] text-warning">
           <AlertTriangle className="size-3.5 shrink-0" />
-          Could not hook this QueryClient, so seeds are one-shot writes — the
-          next refetch will overwrite them.
+          {isRoute
+            ? 'Could not patch fetch, so requests cannot be intercepted.'
+            : 'Could not hook this QueryClient, so seeds are one-shot writes — the next refetch will overwrite them.'}
         </p>
       ) : null}
 
@@ -121,7 +139,7 @@ export function SeedEditor({
           onSubmit={(event) => {
             event.preventDefault()
             if (!savingName.trim() || parsed.error) return
-            onSaveFixture(savingName, target.queryKey, parsed.value)
+            onSaveFixture(savingName, target.ref, parsed.value, meta)
             setSavingName(null)
           }}
         >
@@ -157,7 +175,24 @@ export function SeedEditor({
           </span>
         )}
 
-        <div className="ml-auto flex shrink-0 gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/*
+            Routes only. Forcing a 500 is most of the reason to seed a request
+            rather than a cache entry, and it has no meaning for a cache write.
+          */}
+          {isRoute ? (
+            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              status
+              <Input
+                className={`h-7 w-16 font-mono text-[11px] ${
+                  statusValid ? '' : 'border-danger text-danger'
+                }`}
+                inputMode="numeric"
+                onChange={(event) => setStatus(event.target.value)}
+                value={status}
+              />
+            </label>
+          ) : null}
           {canSaveFixture ? (
             <Button
               disabled={Boolean(parsed.error)}
@@ -176,14 +211,14 @@ export function SeedEditor({
           ) : null}
           {/*
             Gated on the parse only. `loading` must not disable this: it means
-            "the cache read has not arrived", which says nothing about whether
-            the editor holds something worth applying — generating a value fills
-            the editor while that read is still outstanding, and an empty editor
-            is already a parse error.
+            "the read has not arrived", which says nothing about whether the
+            editor holds something worth applying — generating a value fills the
+            editor while that read is still outstanding, and an empty editor is
+            already a parse error.
           */}
           <Button
-            disabled={Boolean(parsed.error)}
-            onClick={() => onApply(target.queryKey, parsed.value)}
+            disabled={Boolean(parsed.error) || (isRoute && !statusValid)}
+            onClick={() => onApply(seedTarget, parsed.value, meta)}
             size="compact"
           >
             {seeded ? 'Update seed' : 'Apply seed'}

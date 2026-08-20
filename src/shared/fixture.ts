@@ -3,34 +3,45 @@
  *
  * These files are committed to the consuming repo and reviewed in pull
  * requests, so the shape is a stable contract rather than an implementation
- * detail — it is versioned, and it is exported from this package so the schema
- * generator planned for milestone 3 can read the same files without
- * reimplementing the parse.
+ * detail — it is versioned, and it is exported from this package so tooling can
+ * read the same files without reimplementing the parse.
  *
  * Everything here is plain JSON by construction: `data` has already crossed the
  * Rozenite bridge, which structured-clones, so it cannot contain functions,
  * class instances, or cycles by the time it lands here.
  */
 
-/** Bumped only for a breaking change to the file layout. */
-export const FIXTURE_VERSION = 1
+import type { SeedMeta } from './types'
+import type { TargetRef } from './target'
+import { formatRef, parseTargetRef } from './target'
+
+/**
+ * Bumped to 2 when `queryKey` became `target`.
+ *
+ * v1 files still read: a bare `queryKey` array is exactly a `key` target, so
+ * `parseFixture` accepts either and existing committed fixtures keep working
+ * without a migration step.
+ */
+export const FIXTURE_VERSION = 2
 
 export type Fixture = {
   version: number
   /** Human-readable name as typed. The filename is a slug of this. */
   name: string
-  /** The query key this fixture seeds. */
-  queryKey: unknown[]
+  /** What this fixture seeds — a query key, or an HTTP route. */
+  target: TargetRef
   /** ISO 8601. Written by the panel, which is the only thing that saves. */
   savedAt: string
   data: unknown
+  /** Transport detail, such as the HTTP status to respond with. */
+  meta?: SeedMeta
 }
 
 /** What the fixture list shows without reading every file's `data`. */
 export type FixtureSummary = {
   name: string
   fileName: string
-  queryKey: unknown[]
+  target: TargetRef
   savedAt: string
   byteLength: number
 }
@@ -60,11 +71,19 @@ export function isFixtureFile(fileName: string): boolean {
 
 export function createFixture(
   name: string,
-  queryKey: unknown[],
+  target: TargetRef,
   data: unknown,
   savedAt: string,
+  meta?: SeedMeta,
 ): Fixture {
-  return { version: FIXTURE_VERSION, name: name.trim(), queryKey, savedAt, data }
+  return {
+    version: FIXTURE_VERSION,
+    name: name.trim(),
+    target,
+    savedAt,
+    data,
+    ...(meta ? { meta } : {}),
+  }
 }
 
 export function serializeFixture(fixture: Fixture): string {
@@ -85,7 +104,7 @@ export class FixtureParseError extends Error {
  *
  * Throws rather than returning null so the panel can name the offending file —
  * a fixture directory is hand-editable, and "one of your fixtures is broken" is
- * a much worse message than "cart.json: queryKey must be an array".
+ * a much worse message than "cart.json: target must be a query key or a route".
  */
 export function parseFixture(fileName: string, text: string): Fixture {
   let raw: unknown
@@ -102,11 +121,25 @@ export function parseFixture(fileName: string, text: string): Fixture {
     throw new FixtureParseError(fileName, 'expected a JSON object')
   }
 
-  const candidate = raw as Partial<Fixture>
+  const candidate = raw as Partial<Fixture> & { queryKey?: unknown }
 
-  if (!Array.isArray(candidate.queryKey)) {
-    throw new FixtureParseError(fileName, 'queryKey must be an array')
+  // `queryKey` is the v1 spelling and is still accepted, so a repo full of
+  // committed fixtures does not need rewriting to upgrade the plugin.
+  const rawTarget = candidate.target ?? candidate.queryKey
+  if (rawTarget === undefined) {
+    throw new FixtureParseError(fileName, 'missing target')
   }
+
+  let target: TargetRef
+  try {
+    target = parseTargetRef(rawTarget)
+  } catch (error) {
+    throw new FixtureParseError(
+      fileName,
+      error instanceof Error ? error.message : 'invalid target',
+    )
+  }
+
   if (!('data' in candidate)) {
     throw new FixtureParseError(fileName, 'missing data')
   }
@@ -122,17 +155,14 @@ export function parseFixture(fileName: string, text: string): Fixture {
     // Fall back to the filename so a hand-written fixture without a name still
     // shows up in the list rather than rendering as blank.
     name: candidate.name?.trim() || fileName.replace(FIXTURE_EXTENSION, ''),
-    queryKey: candidate.queryKey,
+    target,
     savedAt: candidate.savedAt ?? '',
     data: candidate.data,
+    ...(candidate.meta ? { meta: candidate.meta } : {}),
   }
 }
 
-/** Structural equality for query keys, used to match a fixture to a live seed. */
-export function sameQueryKey(a: unknown[], b: unknown[]): boolean {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return false
-  }
+/** Structural equality for targets, used to match a fixture to a live seed. */
+export function sameTarget(a: TargetRef, b: TargetRef): boolean {
+  return formatRef(a) === formatRef(b) && a.kind === b.kind
 }

@@ -1,6 +1,7 @@
 import { generate } from '../shared/generate'
 import type { SchemaDocument } from '../shared/schema'
 import type {
+  AdapterRow,
   ApplyFixtureArgs,
   ApplyFixtureResult,
   ApplySeedArgs,
@@ -11,91 +12,136 @@ import type {
   GenerateSeedArgs,
   GenerateSeedResult,
   ListFixturesResult,
-  ListQueriesArgs,
-  ListQueriesResult,
-  QueryRow,
-  ReadQueryArgs,
-  ReadQueryResult,
+  ListTargetsArgs,
+  ListTargetsResult,
+  TargetArgs,
+  TargetRow,
+  ReadTargetArgs,
+  ReadTargetResult,
 } from '../shared/agent-tools'
+import type { SeedMeta } from '../shared/types'
+import type { SeedTarget, TargetRef } from '../shared/target'
+import { formatRef, keyTarget, parseRoutePattern, routeTarget } from '../shared/target'
 import type { Session } from './session'
 
 /**
  * The agent surface, as plain functions over a `Session`.
  *
  * Kept free of React and of `@rozenite/agent-bridge` so each one is directly
- * testable: `use-query-seed-agent-tools.ts` is only wiring.
+ * testable: `use-seed-agent-tools.ts` is only wiring.
  *
- * Every write reports `persistent`, because a seed applied to a client that
- * could not be hooked is a one-shot write the next refetch erases. A test that
- * seeds and then asserts would otherwise fail somewhere far away from the
+ * Every write reports `persistent`, because a seed applied through an adapter
+ * that could not be hooked is a one-shot write the next fetch erases. A test
+ * that seeds and then asserts would otherwise fail somewhere far away from the
  * cause.
  */
 
 const DEFAULT_LIMIT = 50
 
-export function listQueries(
+/**
+ * Turns the caller's `queryKey` or `route` into a target.
+ *
+ * Rejects both-or-neither rather than picking one. An agent that sent both
+ * probably means something different from whatever we would have guessed, and
+ * a silent choice would show up as a seed that quietly did not apply.
+ */
+function toTarget(args: TargetArgs): SeedTarget {
+  const hasKey = Array.isArray(args.queryKey)
+  const hasRoute = typeof args.route === 'string' && args.route.trim() !== ''
+  if (hasKey && hasRoute) {
+    throw new Error('Pass either queryKey or route, not both.')
+  }
+  if (hasKey) return keyTarget(args.queryKey as unknown[])
+  if (hasRoute) {
+    const pattern = parseRoutePattern(args.route as string)
+    return routeTarget(pattern.method, pattern.glob)
+  }
+  throw new Error('Pass a queryKey (e.g. ["user", 7]) or a route (e.g. "GET /api/users/7").')
+}
+
+/** The inverse, for rows: whichever field applies, so output mirrors input. */
+function refFields(ref: TargetRef): { queryKey?: unknown[]; route?: string } {
+  return ref.kind === 'key'
+    ? { queryKey: [...ref.key] }
+    : { route: `${ref.method} ${ref.url}` }
+}
+
+export function listTargets(
   session: Session,
-  args: ListQueriesArgs = {},
-): ListQueriesResult {
+  args: ListTargetsArgs = {},
+): ListTargetsResult {
   const limit = args.limit ?? DEFAULT_LIMIT
   const search = args.search?.toLowerCase()
 
-  let queries = session.listQueries()
-  if (args.onlySeeded) queries = queries.filter((query) => query.seeded)
+  let targets = session.listTargets()
+  if (args.adapter) targets = targets.filter((t) => t.adapter === args.adapter)
+  if (args.onlySeeded) targets = targets.filter((t) => t.seeded)
   if (search) {
-    queries = queries.filter((query) =>
-      JSON.stringify(query.queryKey).toLowerCase().includes(search),
-    )
+    targets = targets.filter((t) => t.label.toLowerCase().includes(search))
   }
 
-  const items: QueryRow[] = queries.slice(0, limit).map((query) => ({
-    queryHash: query.queryHash,
-    queryKey: query.queryKey,
-    status: query.status,
-    fetchStatus: query.fetchStatus,
-    observerCount: query.observerCount,
-    seeded: query.seeded,
-    bytes: query.preview?.byteLength ?? 0,
-    summary: summarize(query.preview?.value),
-    error: query.error,
+  const items: TargetRow[] = targets.slice(0, limit).map((target) => ({
+    id: target.id,
+    adapter: target.adapter,
+    label: target.label,
+    ...refFields(target.ref),
+    status: target.status,
+    fetchStatus: target.fetchStatus,
+    seeded: target.seeded,
+    bytes: target.preview?.byteLength ?? 0,
+    summary: summarize(target.preview?.value),
+    observerCount: target.observerCount,
+    hits: target.hits,
+    error: target.error,
   }))
 
-  return { items, truncated: queries.length > items.length }
+  const adapters: AdapterRow[] = session.adapters.map((adapter) => ({
+    id: adapter.id,
+    label: adapter.label,
+    intercept: adapter.intercept,
+    enumerable: adapter.enumerable,
+  }))
+
+  return { items, adapters, truncated: targets.length > items.length }
 }
 
-export function readQuery(session: Session, args: ReadQueryArgs): ReadQueryResult {
-  const hash = session.hashKey(args.queryKey)
-  const payload = hash ? session.readData(hash) : { kind: 'undefined' as const }
-  const found = payload.kind !== 'undefined'
+export function readTarget(session: Session, args: ReadTargetArgs): ReadTargetResult {
+  requireAdapters(session)
+  const target = toTarget(args)
+  const label = formatRef(target.ref)
+  const id = session.identify(target)
+  const payload = id ? session.readData(id) : { kind: 'undefined' as const }
   return {
-    queryKey: args.queryKey,
-    found,
-    seeded: Boolean(hash && session.getSeed(hash)),
+    label,
+    found: payload.kind !== 'undefined',
+    seeded: Boolean(id && session.findSeed(id)),
     data: payload.value ?? null,
     truncated: payload.truncated,
   }
 }
 
 export function applySeed(session: Session, args: ApplySeedArgs): ApplySeedResult {
-  requireDriver(session)
-  session.apply(args.queryKey, args.data)
+  requireAdapters(session)
+  const target = toTarget(args)
+  const applied = session.apply(target, args.data, metaFrom(args))
+  if (!applied) throw noAdapterFor(session, target)
   return {
-    queryKey: args.queryKey,
-    queryHash: session.hashKey(args.queryKey) ?? '',
-    persistent: session.capabilities.intercept,
+    id: applied.id,
+    label: formatRef(target.ref),
+    adapter: target.adapter || session.adapters[0]?.id || '',
+    persistent: applied.persistent,
   }
 }
 
 export function clearSeed(session: Session, args: ClearSeedArgs): ClearSeedResult {
-  requireDriver(session)
-  return { queryKey: args.queryKey, cleared: session.clearByKey(args.queryKey) }
+  requireAdapters(session)
+  const target = toTarget(args)
+  return { label: formatRef(target.ref), cleared: session.clearByTarget(target) }
 }
 
 export function clearAllSeeds(session: Session): ClearAllSeedsResult {
-  requireDriver(session)
-  const cleared = session.seedCount
-  session.clearAll()
-  return { cleared }
+  requireAdapters(session)
+  return { cleared: session.clearAll() }
 }
 
 export function listFixtures(session: Session): ListFixturesResult {
@@ -103,7 +149,8 @@ export function listFixtures(session: Session): ListFixturesResult {
     items: session.fixtureSummaries.map((fixture) => ({
       id: fixture.id,
       name: fixture.name,
-      queryKey: fixture.queryKey,
+      label: fixture.label,
+      ...refFields(fixture.target),
       bytes: fixture.byteLength,
     })),
     problems: session.fixtureProblems,
@@ -114,21 +161,24 @@ export function applyFixture(
   session: Session,
   args: ApplyFixtureArgs,
 ): ApplyFixtureResult {
-  requireDriver(session)
+  requireAdapters(session)
   const fixture = session.findFixture(args.fixture)
   if (!fixture) {
     const available = session.fixtureSummaries.map((item) => item.name)
     throw new Error(
       available.length === 0
-        ? 'No fixtures are bundled with this app. Pass `fixtures: require.context(...)` to useQuerySeeder.'
+        ? 'No fixtures are bundled with this app. Pass `fixtures: require.context(...)` to useSeeder.'
         : `No fixture "${args.fixture}". Available: ${available.join(', ')}`,
     )
   }
-  session.apply(fixture.queryKey, fixture.data)
+  const target: SeedTarget = { adapter: '', ref: fixture.target }
+  const applied = session.apply(target, fixture.data, fixture.meta)
+  if (!applied) throw noAdapterFor(session, target)
   return {
     fixture: fixture.name,
-    queryKey: [...fixture.queryKey],
-    persistent: session.capabilities.intercept,
+    label: formatRef(fixture.target),
+    adapter: applied.id.slice(0, applied.id.indexOf(':')),
+    persistent: applied.persistent,
   }
 }
 
@@ -136,32 +186,44 @@ export function generateSeed(
   session: Session,
   args: GenerateSeedArgs,
 ): GenerateSeedResult {
-  requireDriver(session)
-  const entry = session.schemaEntryFor(args.queryKey)
+  requireAdapters(session)
+  const target = toTarget(args)
+  const label = formatRef(target.ref)
+
+  const entry = session.schemaEntryFor(target.ref)
   if (!entry) {
     throw new Error(
-      `No schema covers ${JSON.stringify(args.queryKey)}. ` +
-        'Add it to query-seed.config.json and re-run `npx query-seed extract`.',
+      `No schema covers ${label}. ` +
+        'Add it to data-seed.config.json and re-run `npx data-seed extract`.',
     )
   }
 
   const result = generate(entry.schema as SchemaDocument, {
-    seed: args.seed ?? JSON.stringify(args.queryKey),
+    seed: args.seed ?? label,
     arrayLength: args.items,
     variant: args.variant,
   })
 
+  let persistent = false
   const applied = args.dryRun !== true
-  if (applied) session.apply(args.queryKey, result.value)
+  if (applied) {
+    const outcome = session.apply(target, result.value, metaFrom(args))
+    if (!outcome) throw noAdapterFor(session, target)
+    persistent = outcome.persistent
+  }
 
   return {
-    queryKey: args.queryKey,
+    label,
     type: entry.type,
     data: result.value,
     applied,
-    persistent: applied && session.capabilities.intercept,
+    persistent,
     warnings: result.warnings,
   }
+}
+
+function metaFrom(args: { status?: number }): SeedMeta | undefined {
+  return typeof args.status === 'number' ? { status: args.status } : undefined
 }
 
 /**
@@ -170,12 +232,26 @@ export function generateSeed(
  * An agent calling a tool against an app that never mounted the hook — or
  * mounted it in a release build, where it is inert — should be told that.
  */
-function requireDriver(session: Session): void {
-  if (session.hashKey(['probe']) === null) {
+function requireAdapters(session: Session): void {
+  if (session.adapters.length === 0) {
     throw new Error(
-      'Query Seed is not attached. useQuerySeeder() must be mounted with a QueryClient, in a development build.',
+      'Data Seed is not attached. useSeeder() must be mounted in a development build.',
     )
   }
+}
+
+/**
+ * Names what is missing, rather than reporting a generic failure.
+ *
+ * Asking for a route with no HTTP adapter installed is the realistic case, and
+ * "no adapter handles GET /api/todos (installed: react-query)" is the message
+ * that tells you to pass `http: true`.
+ */
+function noAdapterFor(session: Session, target: SeedTarget): Error {
+  const installed = session.adapters.map((adapter) => adapter.id).join(', ') || 'none'
+  return new Error(
+    `No adapter handles ${formatRef(target.ref)} (installed: ${installed}).`,
+  )
 }
 
 function summarize(value: unknown): string {

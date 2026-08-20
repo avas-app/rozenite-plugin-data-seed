@@ -1,6 +1,9 @@
-import type { Capabilities, QuerySnapshot } from '../shared/types'
-import { serialize } from './serialize'
-import type { Session } from './session'
+import type { TargetSnapshot } from '../../shared/types'
+import { ADAPTER_REACT_QUERY } from '../../shared/target'
+import type { TargetRef } from '../../shared/target'
+import { serialize } from '../serialize'
+import type { SeedAdapter, Session } from '../session'
+import { clone } from '../clone'
 
 /**
  * Hooks a TanStack `QueryClient` so the panel can both watch the cache and put
@@ -100,16 +103,26 @@ type ResolvedOptions = {
    */
 }
 
-export function instrumentClient(
+/**
+ * Memo of seeded option objects, keyed by the resolved object TanStack handed
+ * us. Weak so it cannot retain options for queries that have been collected.
+ */
+const seededCache = new WeakMap<
+  ResolvedOptions,
+  { appliedAt: number; options: ResolvedOptions }
+>()
+
+export function installReactQueryAdapter(
   client: QueryClientLike,
   session: Session,
 ): () => void {
   const disposers: Array<() => void> = []
-  const capabilities: Partial<Capabilities> = { intercept: false }
+  const seeds = session.seedReader(ADAPTER_REACT_QUERY)
 
   // ---- interception ----
 
   const original = client.defaultQueryOptions
+  let intercept = false
 
   if (typeof original === 'function') {
     /**
@@ -132,7 +145,7 @@ export function instrumentClient(
       const hash = resolved?.queryHash
       if (!hash) return resolved
 
-      const seed = session.getSeed(hash)
+      const seed = seeds.get(hash)
       if (!seed) return resolved
 
       // Preserve identity for repeat resolutions of the same options object.
@@ -160,13 +173,13 @@ export function instrumentClient(
          * it, which would otherwise corrupt the seed for every later refetch.
          */
         queryFn: (context: unknown) => {
-          const current = session.getSeed(hash)
+          const current = seeds.get(hash)
           if (current) return Promise.resolve(clone(current.data))
           if (typeof fallback === 'function') {
             return (fallback as (ctx: unknown) => unknown)(context)
           }
           return Promise.reject(
-            new Error(`[query-seed] no queryFn to fall back to for ${hash}`),
+            new Error(`[data-seed] no queryFn to fall back to for ${hash}`),
           )
         },
         // A seed is authoritative until withdrawn. Left stale, background
@@ -186,7 +199,7 @@ export function instrumentClient(
     }
 
     client.defaultQueryOptions = patched as QueryClientLike['defaultQueryOptions']
-    capabilities.intercept = true
+    intercept = true
 
     disposers.push(() => {
       // Only restore if nothing else wrapped us afterwards; clobbering another
@@ -197,7 +210,7 @@ export function instrumentClient(
     })
   }
 
-  // ---- driver ----
+  // ---- addressing ----
 
   const hashKey = (queryKey: readonly unknown[]): string => {
     // Ask the library rather than reimplementing its hashing, so this stays
@@ -211,65 +224,70 @@ export function instrumentClient(
     return cache.get?.(queryHash) ?? cache.getAll().find((q) => q.queryHash === queryHash)
   }
 
-  session.attachDriver(
-    {
-      hashKey,
+  const adapter: SeedAdapter = {
+    id: ADAPTER_REACT_QUERY,
+    label: 'React Query',
+    intercept,
+    enumerable: true,
 
-      listQueries: () =>
-        client
-          .getQueryCache()
-          .getAll()
-          .map((query) => toSnapshot(query, session)),
+    identify: (ref) => (ref.kind === 'key' ? hashKey(ref.key) : null),
 
-      readData: (queryHash) => {
-        const query = findQuery(queryHash)
-        return query ? serialize(query.state.data) : { kind: 'undefined' }
-      },
+    listTargets: () =>
+      client
+        .getQueryCache()
+        .getAll()
+        .map((query) => toSnapshot(query, Boolean(seeds.get(query.queryHash)))),
 
-      push: (queryKey, data) => {
-        // A fetch already in flight would resolve *after* this write and
-        // overwrite the seed with real data — a race that shows up exactly when
-        // you seed a screen as it mounts, which is the common case.
-        void client.cancelQueries?.({ queryKey, exact: true })
-        client.setQueryData(queryKey, clone(data))
-
-        /**
-         * Retrofit the seed onto a query that was already built.
-         *
-         * Patching `defaultQueryOptions` only covers *resolution*, and a query
-         * created before the seed existed has its resolved options stored on it
-         * already. `refetchQueries` fetches with those stored options and never
-         * re-resolves, so without this the seed is silently skipped for exactly
-         * the queries most likely to be seeded — the ones already on screen.
-         *
-         * Re-running the (patched) resolver over the query's own options is
-         * what folds the seed in; the delegating `queryFn` above keeps the
-         * result correct after the seed is withdrawn.
-         */
-        const query = findQuery(hashKey(queryKey)) as SeedableQuery | undefined
-        if (query?.setOptions && query.options) {
-          try {
-            query.setOptions(client.defaultQueryOptions(query.options))
-          } catch {
-            // Older or patched builds may not accept this; the seed still
-            // applies on the next resolution, which is the common path.
-          }
-        }
-      },
-
-      invalidate: (queryKey) => {
-        void client.invalidateQueries({ queryKey, exact: true })
-      },
+    readData: (identity) => {
+      const query = findQuery(identity)
+      return query ? serialize(query.state.data) : { kind: 'undefined' }
     },
-    capabilities,
-  )
+
+    push: (ref, data) => {
+      if (ref.kind !== 'key') return
+      const queryKey = ref.key
+
+      // A fetch already in flight would resolve *after* this write and
+      // overwrite the seed with real data — a race that shows up exactly when
+      // you seed a screen as it mounts, which is the common case.
+      void client.cancelQueries?.({ queryKey, exact: true })
+      client.setQueryData(queryKey, clone(data))
+
+      /**
+       * Retrofit the seed onto a query that was already built.
+       *
+       * Patching `defaultQueryOptions` only covers *resolution*, and a query
+       * created before the seed existed has its resolved options stored on it
+       * already. `refetchQueries` fetches with those stored options and never
+       * re-resolves, so without this the seed is silently skipped for exactly
+       * the queries most likely to be seeded — the ones already on screen.
+       *
+       * Re-running the (patched) resolver over the query's own options is
+       * what folds the seed in; the delegating `queryFn` above keeps the
+       * result correct after the seed is withdrawn.
+       */
+      const query = findQuery(hashKey(queryKey)) as SeedableQuery | undefined
+      if (query?.setOptions && query.options) {
+        try {
+          query.setOptions(client.defaultQueryOptions(query.options))
+        } catch {
+          // Older or patched builds may not accept this; the seed still
+          // applies on the next resolution, which is the common path.
+        }
+      }
+    },
+
+    invalidate: (ref) => {
+      if (ref.kind !== 'key') return
+      void client.invalidateQueries({ queryKey: ref.key, exact: true })
+    },
+  }
+
+  disposers.push(session.registerAdapter(adapter))
 
   // ---- cache observation ----
 
-  const cache = client.getQueryCache()
-  const unsubscribe = cache.subscribe(() => session.scheduleFlush())
-  disposers.push(unsubscribe)
-  disposers.push(() => session.attachDriver(null, { intercept: false }))
+  disposers.push(client.getQueryCache().subscribe(() => session.scheduleFlush()))
 
   return () => {
     for (const dispose of disposers.reverse()) {
@@ -282,25 +300,24 @@ export function instrumentClient(
   }
 }
 
-/**
- * Memo of seeded option objects, keyed by the resolved object TanStack handed
- * us. Weak so it cannot retain options for queries that have been collected.
- */
-const seededCache = new WeakMap<
-  ResolvedOptions,
-  { appliedAt: number; options: ResolvedOptions }
->()
-
-function toSnapshot(query: QueryLike, session: Session): QuerySnapshot {
+function toSnapshot(query: QueryLike, seeded: boolean): TargetSnapshot {
   const state = query.state ?? {}
+  const ref: TargetRef = {
+    kind: 'key',
+    key: (serialize(query.queryKey).value as unknown[]) ?? [],
+  }
   return {
-    queryHash: query.queryHash,
-    queryKey: (serialize(query.queryKey).value as unknown[]) ?? [],
+    id: `${ADAPTER_REACT_QUERY}:${query.queryHash}`,
+    adapter: ADAPTER_REACT_QUERY,
+    ref,
+    // TanStack's hash is already the JSON rendering of the key, and it is what
+    // appears in the caller's source — no point re-deriving a second form.
+    label: query.queryHash,
     status: state.status ?? 'pending',
     fetchStatus: state.fetchStatus ?? 'idle',
     observerCount: query.getObserversCount?.() ?? 0,
-    dataUpdatedAt: state.dataUpdatedAt ?? 0,
-    seeded: Boolean(session.getSeed(query.queryHash)),
+    updatedAt: state.dataUpdatedAt ?? 0,
+    seeded,
     preview: serialize(state.data, { preview: true }),
     error: state.error ? errorMessage(state.error) : undefined,
   }
@@ -309,26 +326,4 @@ function toSnapshot(query: QueryLike, session: Session): QuerySnapshot {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
-}
-
-/**
- * Deep-clones a seed value.
- *
- * Seeds arrive from the panel as plain JSON, so the JSON fallback is lossless
- * here — `structuredClone` is preferred only because it is faster and does not
- * choke on values a future non-panel caller might pass in.
- */
-function clone<T>(value: T): T {
-  if (typeof structuredClone === 'function') {
-    try {
-      return structuredClone(value)
-    } catch {
-      // Fall through: structuredClone rejects functions and class instances.
-    }
-  }
-  try {
-    return JSON.parse(JSON.stringify(value)) as T
-  } catch {
-    return value
-  }
 }
