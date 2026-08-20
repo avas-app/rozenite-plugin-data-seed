@@ -3,11 +3,49 @@
   "source": "./api.ts",
   "out": "./data-seed.schemas.json",
   "targets": [
-    { "key": ["todos"], "type": "ApiResponse<Todo[]>" },
-    { "key": ["user", "*"], "type": "ApiResponse<User>" },
-    { "key": ["settings"], "type": "ApiResponse<Settings>" },
-    { "key": ["thread", "*"], "type": "ApiResponse<Comment>" },
-    { "key": ["notifications"], "type": "ApiResponse<Notification[]>" },
-    { "route": "GET /v1/profile", "type": "Profile" }
+    {
+      "key": [
+        "todos"
+      ],
+      "type": "ApiResponse<Todo[]>"
+    },
+    {
+      "key": [
+        "user",
+        "*"
+      ],
+      "type": "ApiResponse<User>"
+    },
+    {
+      "key": [
+        "settings"
+      ],
+      "type": "ApiResponse<Settings>"
+    },
+    {
+      "key": [
+        "thread",
+        "*"
+      ],
+      "type": "ApiResponse<Comment>"
+    },
+    {
+      "key": [
+        "notifications"
+      ],
+      "type": "ApiResponse<Notification[]>"
+    },
+    {
+      "route": "GET /v1/profile",
+      "type": "Profile"
+    },
+    {
+      "route": "GET /v1/orders",
+      "type": "Order[]"
+    },
+    {
+      "route": "GET /v1/invoice",
+      "type": "Invoice"
+    }
   ]
 }

@@ -358,6 +358,22 @@ export default {
                                         "glob": "/v1/profile"
                                   },
                                   "type": "Profile"
+                            },
+                            {
+                                  "pattern": {
+                                        "kind": "route",
+                                        "method": "GET",
+                                        "glob": "/v1/orders"
+                                  },
+                                  "type": "Order[]"
+                            },
+                            {
+                                  "pattern": {
+                                        "kind": "route",
+                                        "method": "GET",
+                                        "glob": "/v1/invoice"
+                                  },
+                                  "type": "Invoice"
                             }
                       ],
                       "capabilities": {
@@ -392,9 +408,9 @@ export default {
                       },
                       "schema": {
                             "$schema": "http://json-schema.org/draft-07/schema#",
-                            "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1361-1509-api.ts-0-5801%5B%5D%3E",
+                            "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1651-api.ts-0-7844%5B%5D%3E",
                             "definitions": {
-                                  "ApiResponse<def-alias-api.ts-1361-1509-api.ts-0-5801[]>": {
+                                  "ApiResponse<def-alias-api.ts-1503-1651-api.ts-0-7844[]>": {
                                         "type": "object",
                                         "properties": {
                                               "data": {
@@ -497,7 +513,7 @@ export default {
                                               "joinedAt"
                                         ],
                                         "additionalProperties": false,
-                                        "description": "The one shape that arrives over a real `fetch`, for the HTTP adapter.\n\nEverything else here is a fake resolved in-process; this deliberately is not, because an adapter that patches `fetch` has nothing to intercept unless something actually calls it."
+                                        "description": "The three shapes that arrive over real networking, one per transport.\n\nEverything else here is a fake resolved in-process; these deliberately are not, because an adapter that patches the network has nothing to intercept unless something actually calls it. React Native has three separate paths and the plugin reaches them in three different ways, so the example exercises all three rather than asserting they work:\n\n  Profile  — `globalThis.fetch`, patched for you   Order    — axios, which uses `XMLHttpRequest` directly   Invoice  — `expo/fetch`, native, wrapped by hand with `seedableFetch`"
                                   }
                             }
                       }
@@ -860,6 +876,22 @@ export default {
                                         "glob": "/v1/profile"
                                   },
                                   "type": "Profile"
+                            },
+                            {
+                                  "pattern": {
+                                        "kind": "route",
+                                        "method": "GET",
+                                        "glob": "/v1/orders"
+                                  },
+                                  "type": "Order[]"
+                            },
+                            {
+                                  "pattern": {
+                                        "kind": "route",
+                                        "method": "GET",
+                                        "glob": "/v1/invoice"
+                                  },
+                                  "type": "Invoice"
                             }
                       ],
                       "capabilities": {

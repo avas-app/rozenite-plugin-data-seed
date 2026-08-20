@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { installHttpAdapter } from '../adapters/http'
+import { installHttpAdapter, seedableFetch } from '../adapters/http'
 import type { HttpAdapterOptions } from '../adapters/http'
 import { routeTarget } from '../../shared/target'
 import { Session } from '../session'
@@ -265,5 +265,82 @@ describe('capabilities', () => {
   test('a query key is not something this adapter can address', () => {
     const { session } = setup()
     expect(session.apply({ adapter: '', ref: { kind: 'key', key: ['a'] } }, 1)).toBeNull()
+  })
+})
+
+describe('seedableFetch', () => {
+  /**
+   * The `expo/fetch` case: an implementation that is neither `globalThis.fetch`
+   * nor built on XHR, and whose module export cannot be replaced.
+   */
+  test('seeds an implementation that was never the global', async () => {
+    const { session } = setup()
+    const native: string[] = []
+    const nativeFetch = async (url: string) => {
+      native.push(url)
+      return new Response('{"source":"native"}', { status: 200 })
+    }
+
+    const wrapped = seedableFetch(nativeFetch)
+    session.apply(routeTarget('GET', '/v1/profile'), { name: 'Ada' })
+
+    const seeded = await wrapped('https://api.example.invalid/v1/profile')
+    expect(await seeded.json()).toEqual({ name: 'Ada' })
+    expect(native).toHaveLength(0)
+
+    const real = await wrapped('https://api.example.invalid/v1/other')
+    expect(await real.json()).toEqual({ source: 'native' })
+    expect(native).toEqual(['https://api.example.invalid/v1/other'])
+  })
+
+  test('honours a seeded status', async () => {
+    const { session } = setup()
+    const wrapped = seedableFetch(
+      async (_url: string) => new Response('{}', { status: 200 }),
+    )
+    session.apply(routeTarget('GET', '/v1/profile'), { error: 'down' }, { status: 503 })
+
+    const response = await wrapped('https://x.com/v1/profile')
+    expect(response.status).toBe(503)
+    expect(response.ok).toBe(false)
+  })
+
+  test('records what it let through, like the global patch does', async () => {
+    const { session } = setup()
+    const wrapped = seedableFetch(
+      async (_url: string) => new Response('{"source":"native"}', { status: 200 }),
+    )
+
+    await wrapped('https://x.com/v1/profile')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const [row] = session.listTargets()
+    expect(row.label).toBe('GET https://x.com/v1/profile')
+    expect(row.preview?.value).toEqual({ source: 'native' })
+  })
+
+  /**
+   * Created at module scope, long before the hook mounts — which is exactly how
+   * an app would write it, so it has to resolve the session per call.
+   */
+  test('is inert before install and after dispose, then works in between', async () => {
+    const calls: string[] = []
+    const wrapped = seedableFetch(async (url: string) => {
+      calls.push(url)
+      return new Response('{"source":"native"}', { status: 200 })
+    })
+
+    // Before any adapter exists.
+    await wrapped('https://x.com/v1/profile')
+    expect(calls).toHaveLength(1)
+
+    const { session, dispose } = setup()
+    session.apply(routeTarget('GET', '/v1/profile'), { name: 'Ada' })
+    await wrapped('https://x.com/v1/profile')
+    expect(calls).toHaveLength(1)
+
+    dispose()
+    await wrapped('https://x.com/v1/profile')
+    expect(calls).toHaveLength(2)
   })
 })

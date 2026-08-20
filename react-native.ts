@@ -10,6 +10,7 @@
  */
 
 export { useSeeder } from './src/sdk/use-seeder'
+export { seedableFetch } from './src/sdk/adapters/http'
 export type { SeederOptions } from './src/sdk/use-seeder'
 export type { FixtureContext, FixtureSource } from './src/sdk/fixtures'
 export type { QueryClientLike } from './src/sdk/adapters/react-query'

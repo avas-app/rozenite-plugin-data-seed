@@ -17,9 +17,11 @@ import {
 } from '@tanstack/react-query'
 import { useSeeder } from '@avasapp/rozenite-plugin-data-seed'
 
-import type { Profile } from './api'
+import type { Invoice, Order, Profile } from './api'
 import {
+  fetchInvoice,
   fetchNotifications,
+  fetchOrders,
   fetchProfile,
   fetchSettings,
   fetchThread,
@@ -42,9 +44,11 @@ import {
  *
  *   - Seed `["todos"]`, then hit "Break the API" — the screen keeps rendering
  *     your data while every real request behind it fails.
- *   - The Profile card calls a real `fetch` at a host that cannot resolve, so
- *     it starts broken. Seed `GET /v1/profile` and it renders, with no server
- *     at either end. Set the status to 500 to put it back.
+ *   - The last three cards call a host that cannot resolve, so they start
+ *     broken by construction — one per networking path React Native has:
+ *     `fetch`, axios over `XMLHttpRequest`, and native `expo/fetch`. Seed
+ *     `GET /v1/profile`, `GET /v1/orders` or `GET /v1/invoice` and they render,
+ *     with no server at either end. Set the status to 503 to break them again.
  */
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,8 +117,16 @@ function Root() {
             <NotificationsCard theme={theme} />
           </Panel>
 
-          <Panel label="GET /v1/profile" theme={theme}>
+          <Panel label="GET /v1/profile · fetch" theme={theme}>
             <ProfileCard theme={theme} />
+          </Panel>
+
+          <Panel label="GET /v1/orders · axios" theme={theme}>
+            <OrdersCard theme={theme} />
+          </Panel>
+
+          <Panel label="GET /v1/invoice · expo/fetch" theme={theme}>
+            <InvoiceCard theme={theme} />
           </Panel>
         </ScrollView>
       </SafeAreaView>
@@ -231,28 +243,28 @@ function NotificationsCard({ theme }: { theme: Theme }) {
 }
 
 /**
- * The only card with no React Query in it at all.
+ * The cards with no React Query in them at all.
  *
- * Plain `fetch` in an effect, which is the case the HTTP adapter exists for —
- * if this needed a query cache to be seedable, the adapter would be pointless.
+ * Raw requests in an effect, which is the case the HTTP adapter exists for — if
+ * these needed a query cache to be seedable, the adapter would be pointless.
  */
-function ProfileCard({ theme }: { theme: Theme }) {
-  const [profile, setProfile] = useState<Profile | null>(null)
+function useRemote<T>(load: () => Promise<T>) {
+  const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(() => {
+  const run = useCallback(() => {
     setLoading(true)
     let cancelled = false
-    fetchProfile()
+    load()
       .then((next) => {
         if (cancelled) return
-        setProfile(next)
+        setData(next)
         setError(null)
       })
       .catch((cause: unknown) => {
         if (cancelled) return
-        setProfile(null)
+        setData(null)
         setError(cause instanceof Error ? cause.message : 'failed')
       })
       .finally(() => {
@@ -261,26 +273,84 @@ function ProfileCard({ theme }: { theme: Theme }) {
     return () => {
       cancelled = true
     }
-  }, [])
+    // `load` is a module-level function per card, so this is stable.
+  }, [load])
 
-  useEffect(load, [load])
+  useEffect(run, [run])
+  return { data, error, loading, run }
+}
 
+function Remote<T>({
+  theme,
+  state,
+  children,
+}: {
+  theme: Theme
+  state: ReturnType<typeof useRemote<T>>
+  children: (data: T) => React.ReactNode
+}) {
   return (
     <>
-      {loading ? <Text style={[styles.dim, theme.dim]}>loading…</Text> : null}
-      {error && !loading ? <Text style={styles.error}>{error}</Text> : null}
-      {profile ? (
+      {state.loading ? <Text style={[styles.dim, theme.dim]}>loading…</Text> : null}
+      {state.error && !state.loading ? (
+        <Text style={styles.error}>{state.error}</Text>
+      ) : null}
+      {state.data ? children(state.data) : null}
+      <View style={styles.cardControls}>
+        <Button label="Request again" onPress={state.run} theme={theme} />
+      </View>
+    </>
+  )
+}
+
+function ProfileCard({ theme }: { theme: Theme }) {
+  const state = useRemote<Profile>(fetchProfile)
+  return (
+    <Remote state={state} theme={theme}>
+      {(profile) => (
         <>
           <Text style={[styles.row, theme.row]}>{profile.name}</Text>
           <Text style={[styles.dim, theme.dim]}>
             {profile.email} · {profile.followers} followers
           </Text>
         </>
-      ) : null}
-      <View style={styles.cardControls}>
-        <Button label="Request again" onPress={load} theme={theme} />
-      </View>
-    </>
+      )}
+    </Remote>
+  )
+}
+
+function OrdersCard({ theme }: { theme: Theme }) {
+  const state = useRemote<Order[]>(fetchOrders)
+  return (
+    <Remote state={state} theme={theme}>
+      {(orders) => (
+        <>
+          {orders.map((order) => (
+            <Text key={order.id} style={[styles.row, theme.row]}>
+              {order.status} · {order.total.toFixed(2)}
+            </Text>
+          ))}
+        </>
+      )}
+    </Remote>
+  )
+}
+
+function InvoiceCard({ theme }: { theme: Theme }) {
+  const state = useRemote<Invoice>(fetchInvoice)
+  return (
+    <Remote state={state} theme={theme}>
+      {(invoice) => (
+        <>
+          <Text style={[styles.row, theme.row]}>
+            {invoice.number} · {invoice.amountDue.toFixed(2)}
+          </Text>
+          <Text style={[styles.dim, theme.dim]}>
+            {invoice.paid ? 'paid' : 'due'} {invoice.dueAt.slice(0, 10)}
+          </Text>
+        </>
+      )}
+    </Remote>
   )
 }
 

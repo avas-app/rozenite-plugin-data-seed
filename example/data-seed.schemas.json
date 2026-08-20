@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generatedAt": "2026-08-20T04:42:35.344Z",
+  "generatedAt": "2026-08-20T05:22:15.532Z",
   "entries": [
     {
       "pattern": [
@@ -9,9 +9,9 @@
       "type": "ApiResponse<Todo[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1361-1509-api.ts-0-5801%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1651-api.ts-0-7844%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-1361-1509-api.ts-0-5801[]>": {
+          "ApiResponse<def-alias-api.ts-1503-1651-api.ts-0-7844[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -297,9 +297,9 @@
       "type": "ApiResponse<Notification[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-2709-3040-api.ts-0-58011999362925%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-3651-3982-api.ts-0-78441999362925%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-2709-3040-api.ts-0-58011999362925[]>": {
+          "ApiResponse<def-alias-api.ts-3651-3982-api.ts-0-78441999362925[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -457,7 +457,92 @@
               "joinedAt"
             ],
             "additionalProperties": false,
-            "description": "The one shape that arrives over a real `fetch`, for the HTTP adapter.\n\nEverything else here is a fake resolved in-process; this deliberately is not, because an adapter that patches `fetch` has nothing to intercept unless something actually calls it."
+            "description": "The three shapes that arrive over real networking, one per transport.\n\nEverything else here is a fake resolved in-process; these deliberately are not, because an adapter that patches the network has nothing to intercept unless something actually calls it. React Native has three separate paths and the plugin reaches them in three different ways, so the example exercises all three rather than asserting they work:\n\n  Profile  — `globalThis.fetch`, patched for you   Order    — axios, which uses `XMLHttpRequest` directly   Invoice  — `expo/fetch`, native, wrapped by hand with `seedableFetch`"
+          }
+        }
+      }
+    },
+    {
+      "pattern": "GET /v1/orders",
+      "type": "Order[]",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/Order%5B%5D",
+        "definitions": {
+          "Order": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "faker": "string.uuid"
+              },
+              "total": {
+                "type": "number",
+                "faker": "number.float({min: 5, max: 500})"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "shipped",
+                  "delivered"
+                ]
+              },
+              "placedAt": {
+                "type": "string",
+                "faker": "date.recent"
+              }
+            },
+            "required": [
+              "id",
+              "total",
+              "status",
+              "placedAt"
+            ],
+            "additionalProperties": false
+          },
+          "Order[]": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Order"
+            }
+          }
+        }
+      }
+    },
+    {
+      "pattern": "GET /v1/invoice",
+      "type": "Invoice",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/Invoice",
+        "definitions": {
+          "Invoice": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "string",
+                "faker": "string.alpha({length: 8})"
+              },
+              "amountDue": {
+                "type": "number",
+                "faker": "number.float({min: 20, max: 2000})"
+              },
+              "dueAt": {
+                "type": "string",
+                "faker": "date.soon"
+              },
+              "paid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "number",
+              "amountDue",
+              "dueAt",
+              "paid"
+            ],
+            "additionalProperties": false
           }
         }
       }

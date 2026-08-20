@@ -21,6 +21,10 @@
  *                          from any other string without an annotation.
  */
 
+import axios from 'axios'
+import { fetch as expoFetch } from 'expo/fetch'
+import { seedableFetch } from '@avasapp/rozenite-plugin-data-seed'
+
 /** Generic envelope, as most real APIs have. */
 export type ApiResponse<T> = {
   data: T
@@ -68,11 +72,17 @@ export type Comment = {
 }
 
 /**
- * The one shape that arrives over a real `fetch`, for the HTTP adapter.
+ * The three shapes that arrive over real networking, one per transport.
  *
- * Everything else here is a fake resolved in-process; this deliberately is not,
- * because an adapter that patches `fetch` has nothing to intercept unless
- * something actually calls it.
+ * Everything else here is a fake resolved in-process; these deliberately are
+ * not, because an adapter that patches the network has nothing to intercept
+ * unless something actually calls it. React Native has three separate paths and
+ * the plugin reaches them in three different ways, so the example exercises all
+ * three rather than asserting they work:
+ *
+ *   Profile  — `globalThis.fetch`, patched for you
+ *   Order    — axios, which uses `XMLHttpRequest` directly
+ *   Invoice  — `expo/fetch`, native, wrapped by hand with `seedableFetch`
  */
 export type Profile = {
   /** @faker person.fullName */
@@ -83,6 +93,26 @@ export type Profile = {
   followers: number
   /** @faker date.past */
   joinedAt: string
+}
+
+export type Order = {
+  /** @faker string.uuid */
+  id: string
+  /** @faker number.float({min: 5, max: 500}) */
+  total: number
+  status: 'pending' | 'shipped' | 'delivered'
+  /** @faker date.recent */
+  placedAt: string
+}
+
+export type Invoice = {
+  /** @faker string.alpha({length: 8}) */
+  number: string
+  /** @faker number.float({min: 20, max: 2000}) */
+  amountDue: number
+  /** @faker date.soon */
+  dueAt: string
+  paid: boolean
 }
 
 /** Discriminated union: the generator must be told which arm to produce. */
@@ -187,10 +217,37 @@ export async function fetchNotifications(): Promise<ApiResponse<Notification[]>>
  */
 export const PROFILE_URL = 'https://api.example.invalid/v1/profile'
 
+export const ORDERS_URL = 'https://api.example.invalid/v1/orders'
+export const INVOICE_URL = 'https://api.example.invalid/v1/invoice'
+
+/** Plain `globalThis.fetch` — covered by `http: true` with no extra wiring. */
 export async function fetchProfile(): Promise<Profile> {
   const response = await fetch(PROFILE_URL)
   if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
   return (await response.json()) as Profile
+}
+
+/** axios, which talks to `XMLHttpRequest` and never touches `fetch`. */
+export async function fetchOrders(): Promise<Order[]> {
+  const { data } = await axios.get<Order[]>(ORDERS_URL)
+  return data
+}
+
+/**
+ * `expo/fetch`, which is native — it goes through neither `globalThis.fetch`
+ * nor `XMLHttpRequest`, and its module export cannot be replaced (Metro
+ * compiles the re-export to a getter with `configurable: false`). So it is
+ * wrapped explicitly, once, here at the import site.
+ *
+ * The wrapper is inert outside `__DEV__`, so this line costs a function call in
+ * production and nothing else.
+ */
+const netFetch = seedableFetch(expoFetch)
+
+export async function fetchInvoice(): Promise<Invoice> {
+  const response = await netFetch(INVOICE_URL)
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
+  return (await response.json()) as Invoice
 }
 
 function iso(daysAgo: number): string {

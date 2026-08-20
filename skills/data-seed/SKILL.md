@@ -23,7 +23,7 @@ Every tool names what it acts on with **exactly one** of these:
 | Field | Example | Seeds |
 | --- | --- | --- |
 | `queryKey` | `["user", 7]` | A TanStack Query cache entry |
-| `route` | `"GET /api/users/*"` | The response to a matching `fetch` |
+| `route` | `"GET /api/users/*"` | The response to a matching HTTP request |
 
 Passing both is an error, and so is passing neither.
 
@@ -38,6 +38,11 @@ this screen handle what the server actually returns", use `route`.
 Route globs: `*` matches within one path segment, `**` crosses segments. So
 `GET /api/users/*` covers `/api/users/7` but **not** `/api/users/7/posts`. An
 omitted method matches any method.
+
+Routes cover `fetch` and `XMLHttpRequest` (so axios) automatically. `expo/fetch`
+is native and reaches neither, so it only works if the app wrapped it with
+`seedableFetch` — if a route seed applies but an `expo/fetch` call still hits the
+network, that is the missing piece. See **Setup**.
 
 ## Calling the tools
 
@@ -132,7 +137,18 @@ useSeeder({
 })
 ```
 
-`queryClient` enables `queryKey` targets; `http: true` enables `route` targets;
+For `expo/fetch`, the app also has to wrap it once at its import site, because
+its module export cannot be patched:
+
+```ts
+import { fetch as expoFetch } from 'expo/fetch'
+import { seedableFetch } from '@avasapp/rozenite-plugin-data-seed'
+
+export const fetch = seedableFetch(expoFetch)
+```
+
+`queryClient` enables `queryKey` targets; `http: true` enables `route` targets
+for `fetch` and axios;
 `fixtures` is what makes `apply-fixture` work; `schemas` is what makes
 `generate-seed` work. None is required for a plain `apply-seed` against an
 installed adapter. Schemas come from `npx data-seed extract`, which reads

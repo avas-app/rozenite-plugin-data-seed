@@ -10,8 +10,8 @@ Two things can be seeded:
 
 - **TanStack Query cache entries**, which survive refetches, invalidation, and
   app focus.
-- **HTTP responses**, by intercepting `fetch`. Works with no query cache at all,
-  and lets you force a 500.
+- **HTTP responses**, by intercepting `fetch`, `XMLHttpRequest` (so, axios) and
+  `expo/fetch`. Works with no query cache at all, and lets you force a 500.
 
 Plus:
 
@@ -111,13 +111,20 @@ Two consequences worth knowing:
 
 ## Seeding HTTP
 
-`http: true` patches `globalThis.fetch`. A seeded route is answered locally and
-never reaches the network; everything else passes through untouched and is
-recorded so you can see what your app actually calls.
+`http: true` patches `globalThis.fetch` **and** `XMLHttpRequest`. A seeded route
+is answered locally and never reaches the network; everything else passes
+through untouched and is recorded so you can see what your app actually calls.
 
 ```ts
 useSeeder({ http: true })
 ```
+
+That covers `fetch`, everything built on it (ky, ofetch, graphql-request), and
+everything built on XHR — **axios** being the one that matters. React Native's
+`fetch` is itself a polyfill over XHR, so a single request would otherwise be
+recorded twice; it is counted once, at the fetch layer.
+
+`expo/fetch` needs one extra line — see [below](#expofetch-needs-one-line).
 
 Routes are matched by pattern, so one seed covers a family of URLs:
 
@@ -147,14 +154,36 @@ To seed something that has never been requested — an endpoint behind an error
 path you cannot reach — type it into the box at the top of the HTTP section. That
 is the case the observed list cannot cover on its own.
 
-### What it does not intercept
+### `expo/fetch` needs one line
 
-- **`XMLHttpRequest` directly**, which means **axios is not covered yet**. In
-  React Native `fetch` is a polyfill over XHR, so patching `fetch` catches fetch
-  callers but not clients that skip it.
-- **`expo/fetch`**, unless your app makes it the global. It is a separate module
-  binding, so patching `globalThis.fetch` does not reach it.
-- **WebSockets and native networking.**
+`expo/fetch` is a **native** implementation — it goes through neither
+`globalThis.fetch` nor `XMLHttpRequest`, so neither patch reaches it. Nor can its
+module export be replaced: Metro compiles the re-export to a getter with
+`configurable: false`, so assignment silently does nothing and
+`Object.defineProperty` throws. Patching it would mean reaching into
+`expo/src/...`, which would make Expo a bundle-time dependency of this package
+and break every bare React Native app that installed it.
+
+So it is wrapped explicitly, once, at your import site:
+
+```ts
+import { fetch as expoFetch } from 'expo/fetch'
+import { seedableFetch } from '@avasapp/rozenite-plugin-data-seed'
+
+export const fetch = seedableFetch(expoFetch)
+```
+
+Everything downstream then behaves exactly like a patched global — same route
+patterns, same status control, same observed list. The wrapper resolves the
+session per call, so it is safe at module scope, and it is inert outside
+`__DEV__` and after the hook unmounts.
+
+### What it still does not intercept
+
+- **WebSockets**, and anything using a native networking module directly.
+- **A `fetch` you captured before the hook mounted.** `const f = fetch` at module
+  scope keeps the original. Call `fetch(...)` normally, or wrap it with
+  `seedableFetch`.
 
 Metro's own dev endpoints (`/symbolicate`, `/hot`, `/inspector/**`) are excluded
 by default so they do not flood the list. The exclusions are deliberately narrow
@@ -164,6 +193,8 @@ a local API. Override with `include` / `exclude`:
 ```ts
 useSeeder({ http: { include: ['https://api.example.com/**'] } })
 ```
+
+`xhr: false` leaves `XMLHttpRequest` alone, if another tool already owns it.
 
 ## What the panel shows
 
@@ -446,11 +477,11 @@ await session.callTool(seedTools.applyFixture, {
 
 ## Limitations
 
-- **axios is not intercepted yet** — see
-  [What it does not intercept](#what-it-does-not-intercept). An `XMLHttpRequest`
-  patch is the next adapter.
 - **SWR is not supported yet.** The adapter seam exists for it; SWR's `use`
   middleware is the equivalent hook point.
+- **`expo/fetch` is opt-in**, for the reasons in
+  [`expo/fetch` needs one line](#expofetch-needs-one-line). It is the only
+  transport that cannot be reached without touching app code.
 - **Authoring fixtures is not scriptable.** Applying them is — see
   [Driving it without DevTools](#driving-it-without-devtools) — but *creating* a
   file goes through the browser, so CI cannot write new ones. The write path sits
@@ -476,9 +507,12 @@ Two things worth trying:
 
 - Seed `["todos"]`, then press **Break the API**. The screen keeps rendering your
   data while every request behind it fails.
-- The **Profile** card is the only one with no React Query in it — plain `fetch`
-  against a `.invalid` host, so it starts broken by construction. Seed
-  `GET /v1/profile` and it renders; set the status to 503 and it breaks again.
+- The last three cards have no React Query in them at all, and each uses a
+  different one of React Native's three networking paths — `fetch`, axios over
+  `XMLHttpRequest`, and native `expo/fetch`. All three point at a `.invalid`
+  host, so they start broken by construction. Seed `GET /v1/profile`,
+  `GET /v1/orders` or `GET /v1/invoice` and they render; set the status to 503
+  and they break again.
 
 It ships a `seeds/` directory covering the states that are tedious to reach
 against a real backend — an empty list, 200 items, every variant of a
@@ -496,7 +530,7 @@ TypeScript-to-JSON-Schema extraction.
 
 ```bash
 bun install
-bun test        # 154 tests
+bun test        # 176 tests
 bun typecheck
 bun run build
 bun run presets # regenerate rozenite.config.ts dev presets
