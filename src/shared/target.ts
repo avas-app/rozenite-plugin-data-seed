@@ -214,6 +214,25 @@ export function matchesKey(pattern: unknown[], key: readonly unknown[]): boolean
   })
 }
 
+/**
+ * Whether a *seed's* ref covers a target.
+ *
+ * A route seed is stored as a pattern, so `GET /v1/profile` covers the observed
+ * `GET https://api.example.invalid/v1/profile`. The panel needs the same rule
+ * the HTTP adapter uses when it serves a request — with plain ref equality, a
+ * row correctly badged "seeded" offers no way to remove that seed, and applying
+ * an edit writes a *second* seed that the first one then shadows.
+ */
+export function refCovers(seed: TargetRef, ref: TargetRef): boolean {
+  if (seed.kind === 'key') {
+    return ref.kind === 'key' && formatRef(seed) === formatRef(ref)
+  }
+  return (
+    ref.kind === 'route' &&
+    matchesRoute(parseRoutePattern(`${seed.method} ${seed.url}`), ref.method, ref.url)
+  )
+}
+
 export function matchesTarget(pattern: TargetPattern, ref: TargetRef): boolean {
   if (pattern.kind === 'key') {
     return ref.kind === 'key' && matchesKey(pattern.key, ref.key)

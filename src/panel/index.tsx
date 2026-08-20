@@ -13,7 +13,7 @@ import { generate as generateValue } from '../shared/generate'
 import { describeSchema } from '../shared/describe'
 import type { SchemaDocument } from '../shared/schema'
 import type { TargetRef } from '../shared/target'
-import { findByTarget, formatRef } from '../shared/target'
+import { findByTarget, formatRef, refCovers } from '../shared/target'
 import type { BundledFixture } from '../shared/types'
 import { GenerateBar } from './components/GenerateBar'
 import { FixtureList } from './components/FixtureList'
@@ -47,6 +47,9 @@ export default function SeedPanel() {
   const [itemCount, setItemCount] = useState(3)
   const [variant, setVariant] = useState<number | null>(null)
   const [warnings, setWarnings] = useState<GenerateWarning[]>([])
+  // Owned here for the same reason `text` is: it has to be reset — and
+  // *prefilled* from an existing seed — every time the target changes.
+  const [status, setStatus] = useState('200')
   // Bumped on every press so repeated Generates give different data, while any
   // single seed still reproduces its value exactly.
   const [roll, setRoll] = useState(0)
@@ -87,12 +90,19 @@ export default function SeedPanel() {
     [fixtures.actions, fixtures.state.ready],
   )
 
-  const openEditor = useCallback((next: EditorTarget) => {
-    setTarget(next)
-    setText('')
-    setFilledFor(null)
-    setWarnings([])
-  }, [])
+  const openEditor = useCallback(
+    (next: EditorTarget) => {
+      setTarget(next)
+      setText('')
+      setFilledFor(null)
+      setWarnings([])
+      // Prefilled from whatever already covers this target, so opening a route
+      // seeded with a 503 and pressing Apply does not quietly reset it to 200.
+      const covering = state.seeds.find((seed) => refCovers(seed.ref, next.ref))
+      setStatus(String(covering?.meta?.status ?? 200))
+    },
+    [state.seeds],
+  )
 
   const selectTarget = useCallback(
     (id: string) => {
@@ -187,17 +197,35 @@ export default function SeedPanel() {
     setFilledFor(target.id ?? target.fixtureId ?? 'generated')
   }, [itemCount, roll, schemaDocument, target, variant])
 
-  // Resolved by ref rather than id: a fixture — or a route rule — can target
-  // something that has never been used, so it has no live id to match on.
+  /**
+   * The seed covering the open target, if any.
+   *
+   * Resolved by ref rather than id, because a fixture — or a route rule — can
+   * target something that has never been used and so has no live id. Route
+   * seeds are patterns, so this has to be *coverage*, not equality: the seed
+   * `GET /v1/profile` is the one behind an observed
+   * `GET https://api.example.invalid/v1/profile`.
+   */
   const activeSeed = useMemo(
     () =>
       target
-        ? (state.seeds.find(
-            (seed) => formatRef(seed.ref) === formatRef(target.ref),
-          ) ?? null)
+        ? (state.seeds.find((seed) => refCovers(seed.ref, target.ref)) ?? null)
         : null,
     [state.seeds, target],
   )
+
+  /**
+   * Applying edits the covering seed rather than adding another one.
+   *
+   * Without this, editing an observed row covered by a broader pattern writes a
+   * second seed at the exact URL — and since the pattern was stored first, it
+   * keeps winning, so the edit silently does nothing.
+   */
+  const applyRef = activeSeed?.ref ?? target?.ref ?? null
+  const seededBy =
+    activeSeed && target && formatRef(activeSeed.ref) !== formatRef(target.ref)
+      ? formatRef(activeSeed.ref)
+      : null
 
   /**
    * Whether *this* target's adapter can make a seed stick.
@@ -318,6 +346,7 @@ useSeeder({ queryClient, http: true })`}
               />
             ) : null
           }
+          applyRef={applyRef}
           intercept={intercept}
           loading={loading}
           onApply={actions.apply}
@@ -326,7 +355,10 @@ useSeeder({ queryClient, http: true })`}
           onSaveFixture={(name, ref, data, meta) =>
             void saveFixture(name, ref, data, meta)
           }
+          onStatusChange={setStatus}
           seeded={Boolean(activeSeed)}
+          seededBy={seededBy}
+          status={status}
           target={target}
           truncated={Boolean(incoming?.data.truncated)}
           value={text}

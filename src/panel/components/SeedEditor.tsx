@@ -42,7 +42,11 @@ export type EditorTarget = {
  */
 export function SeedEditor({
   target,
+  applyRef,
+  seededBy,
   value,
+  status,
+  onStatusChange,
   onChange,
   loading,
   truncated,
@@ -55,7 +59,18 @@ export function SeedEditor({
   generate,
 }: {
   target: EditorTarget | null
+  /**
+   * The ref an Apply writes to. Differs from `target.ref` when a broader route
+   * pattern already covers this target — editing then updates that rule instead
+   * of adding a second, shadowed one.
+   */
+  applyRef: TargetRef | null
+  /** The covering seed's pattern, when it is not the target itself. */
+  seededBy: string | null
   value: string
+  /** HTTP status as typed. Owned by the parent, like `value`. */
+  status: string
+  onStatusChange: (next: string) => void
   onChange: (next: string) => void
   loading: boolean
   truncated: boolean
@@ -75,7 +90,6 @@ export function SeedEditor({
   generate?: React.ReactNode
 }) {
   const [savingName, setSavingName] = useState<string | null>(null)
-  const [status, setStatus] = useState('200')
 
   if (!target) {
     return (
@@ -94,7 +108,10 @@ export function SeedEditor({
   const statusValid = Number.isFinite(parsedStatus) && parsedStatus >= 100 && parsedStatus <= 599
   const meta: SeedMeta | undefined =
     isRoute && statusValid && parsedStatus !== 200 ? { status: parsedStatus } : undefined
-  const seedTarget: SeedTarget = { adapter: target.adapter, ref: target.ref }
+  const seedTarget: SeedTarget = {
+    adapter: target.adapter,
+    ref: applyRef ?? target.ref,
+  }
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
@@ -105,6 +122,13 @@ export function SeedEditor({
         {target.fixtureName ? (
           <span className="shrink-0 text-[11px] text-muted-foreground">
             from {target.fixtureName}
+          </span>
+        ) : null}
+        {/* Names the rule being edited when it is broader than the row clicked,
+            so Apply updating something else is visible rather than surprising. */}
+        {seededBy ? (
+          <span className="shrink-0 font-mono text-[11px] text-primary">
+            seeded by {seededBy}
           </span>
         ) : null}
         {truncated ? (
@@ -188,7 +212,7 @@ export function SeedEditor({
                   statusValid ? '' : 'border-danger text-danger'
                 }`}
                 inputMode="numeric"
-                onChange={(event) => setStatus(event.target.value)}
+                onChange={(event) => onStatusChange(event.target.value)}
                 value={status}
               />
             </label>

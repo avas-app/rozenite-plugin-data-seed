@@ -458,13 +458,13 @@ export default {
                 }
           },
           {
-                "name": "Schema for GET /v1/profile",
+                "name": "Schema for the profile route",
                 "type": "seed:schema",
                 "payload": {
                       "ref": {
                             "kind": "route",
                             "method": "GET",
-                            "url": "/v1/profile"
+                            "url": "https://api.example.invalid/v1/profile"
                       },
                       "schema": {
                             "$schema": "http://json-schema.org/draft-07/schema#",

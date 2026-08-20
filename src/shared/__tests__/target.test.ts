@@ -10,6 +10,7 @@ import {
   parseRoutePattern,
   parseTargetPattern,
   parseTargetRef,
+  refCovers,
   routeTarget,
   urlPath,
 } from '../target'
@@ -198,5 +199,37 @@ describe('formatRef', () => {
   test('renders each kind the way it is written in source', () => {
     expect(formatRef(keyTarget(['user', 7]).ref)).toBe('["user",7]')
     expect(formatRef(routeTarget('get', '/api/a').ref)).toBe('GET /api/a')
+  })
+})
+
+describe('refCovers', () => {
+  test('a route seed is a pattern, so it covers the URLs it matches', () => {
+    const seed = routeTarget('GET', '/v1/profile').ref
+    expect(
+      refCovers(seed, routeTarget('GET', 'https://api.example.invalid/v1/profile').ref),
+    ).toBe(true)
+    expect(refCovers(seed, routeTarget('GET', '/v1/other').ref)).toBe(false)
+  })
+
+  test('a glob seed covers every URL under it', () => {
+    const seed = routeTarget('GET', '/api/users/*').ref
+    expect(refCovers(seed, routeTarget('GET', 'https://x.com/api/users/7').ref)).toBe(
+      true,
+    )
+  })
+
+  test('key seeds still need exact equality', () => {
+    const seed = keyTarget(['user', 7]).ref
+    expect(refCovers(seed, keyTarget(['user', 7]).ref)).toBe(true)
+    expect(refCovers(seed, keyTarget(['user', 8]).ref)).toBe(false)
+  })
+
+  test('kinds never cover each other', () => {
+    expect(
+      refCovers(keyTarget(['/v1/profile']).ref, routeTarget('GET', '/v1/profile').ref),
+    ).toBe(false)
+    expect(
+      refCovers(routeTarget('GET', '/v1/profile').ref, keyTarget(['/v1/profile']).ref),
+    ).toBe(false)
   })
 })

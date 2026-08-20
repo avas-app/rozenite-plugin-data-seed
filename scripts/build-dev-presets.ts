@@ -28,6 +28,8 @@ import { keyTarget, routeTarget } from '../src/shared/target'
 import type { Snapshot } from '../src/shared/types'
 
 const ROOT = path.resolve(import.meta.dir, '..')
+/** Matches what the example app requests, so presets echo a realistic ref. */
+const PROFILE_URL = 'https://api.example.invalid/v1/profile'
 const SEEDS = path.join(ROOT, 'example/seeds')
 const SCHEMAS = path.join(ROOT, 'example/data-seed.schemas.json')
 const CONFIG = path.join(ROOT, 'rozenite.config.ts')
@@ -121,7 +123,7 @@ async function buildSnapshot(): Promise<Snapshot> {
     meta: { requestId: 'req_seed', durationMs: 0 },
   })
 
-  await fetch('https://api.example.invalid/v1/profile').catch(() => {})
+  await fetch(PROFILE_URL).catch(() => {})
   await fetch('https://api.example.invalid/v1/feed?page=1')
   session.apply(routeTarget('GET', '/v1/profile'), { error: 'upstream unavailable' }, {
     status: 503,
@@ -141,6 +143,15 @@ async function buildSnapshot(): Promise<Snapshot> {
   return snapshot
 }
 
+/**
+ * A `seed:schema` reply.
+ *
+ * `ref` must be the ref the panel *asked about*, not the pattern that matched
+ * it: the panel discards a reply whose ref does not match the open target, so
+ * that a schema fetched for one target cannot fill in for the next. The SDK
+ * echoes the request back, so a preset has to as well — a preset carrying the
+ * pattern instead just renders as a Generate button stuck on "Loading…".
+ */
 function schemaPreset(name: string, ref: unknown, entryType: string) {
   const file = parseSchemasFile(JSON.parse(fs.readFileSync(SCHEMAS, 'utf8')))
   const entry = file.entries.find((candidate) => candidate.type === entryType)
@@ -191,8 +202,10 @@ const presets = [
   { name: 'Everything: queries, routes, fixtures, schemas', type: 'seed:snapshot', payload: full },
   schemaPreset('Schema for ["todos"]', { kind: 'key', key: ['todos'] }, 'ApiResponse<Todo[]>'),
   schemaPreset(
-    'Schema for GET /v1/profile',
-    { kind: 'route', method: 'GET', url: '/v1/profile' },
+    'Schema for the profile route',
+    // The observed URL, which is what the panel asks about when that row is
+    // selected — the pattern `/v1/profile` is what *matched* it.
+    { kind: 'route', method: 'GET', url: PROFILE_URL },
     'Profile',
   ),
   {
