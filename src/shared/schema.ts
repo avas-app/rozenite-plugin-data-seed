@@ -27,7 +27,9 @@ export type SchemaNode = {
   maxItems?: number
   minimum?: number
   maximum?: number
-  /** Our `@faker` JSDoc tag, surfaced by ts-json-schema-generator's extraTags. */
+  /** Our `@fake` JSDoc tag, surfaced by ts-json-schema-generator's extraTags. */
+  fake?: string
+  /** The original spelling of `@fake`, still read so old annotations work. */
   faker?: string
   [key: string]: unknown
 }

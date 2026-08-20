@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generatedAt": "2026-08-20T05:22:15.532Z",
+  "generatedAt": "2026-08-20T05:44:24.718Z",
   "entries": [
     {
       "pattern": [
@@ -9,9 +9,9 @@
       "type": "ApiResponse<Todo[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1651-api.ts-0-7844%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1649-api.ts-0-7984%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-1503-1651-api.ts-0-7844[]>": {
+          "ApiResponse<def-alias-api.ts-1503-1649-api.ts-0-7984[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -52,14 +52,14 @@
               },
               "title": {
                 "type": "string",
-                "faker": "lorem.sentence"
+                "fake": "lorem.sentence"
               },
               "done": {
                 "type": "boolean"
               },
               "createdAt": {
                 "type": "string",
-                "faker": "date.recent"
+                "fake": "date.recent"
               }
             },
             "required": [
@@ -118,23 +118,23 @@
             "properties": {
               "id": {
                 "type": "number",
-                "faker": "number.int({min: 1, max: 9999})"
+                "fake": "number.int({min: 1, max: 9999})"
               },
               "name": {
                 "type": "string",
-                "faker": "person.fullName"
+                "fake": "person.fullName"
               },
               "email": {
                 "type": "string",
-                "faker": "internet.email"
+                "fake": "internet.email"
               },
               "avatarUrl": {
                 "type": "string",
-                "faker": "image.avatar"
+                "fake": "image.avatar"
               },
               "createdAt": {
                 "type": "string",
-                "faker": "date.past"
+                "fake": "date.past"
               }
             },
             "required": [
@@ -260,15 +260,16 @@
               },
               "author": {
                 "type": "string",
+                "description": "Deliberately still on the original `@faker` spelling, so the example exercises the alias rather than the README only claiming it works.",
                 "faker": "internet.userName"
               },
               "body": {
                 "type": "string",
-                "faker": "lorem.paragraph"
+                "fake": "lorem.paragraph"
               },
               "createdAt": {
                 "type": "string",
-                "faker": "date.recent"
+                "fake": "date.recent"
               },
               "replies": {
                 "type": "array",
@@ -297,9 +298,9 @@
       "type": "ApiResponse<Notification[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-3651-3982-api.ts-0-78441999362925%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-3791-4122-api.ts-0-79841999362925%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-3651-3982-api.ts-0-78441999362925[]>": {
+          "ApiResponse<def-alias-api.ts-3791-4122-api.ts-0-79841999362925[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -435,19 +436,19 @@
             "properties": {
               "name": {
                 "type": "string",
-                "faker": "person.fullName"
+                "fake": "person.fullName"
               },
               "email": {
                 "type": "string",
-                "faker": "internet.email"
+                "fake": "internet.email"
               },
               "followers": {
                 "type": "number",
-                "faker": "number.int({min: 0, max: 50000})"
+                "fake": "number.int({min: 0, max: 50000})"
               },
               "joinedAt": {
                 "type": "string",
-                "faker": "date.past"
+                "fake": "date.past"
               }
             },
             "required": [
@@ -474,11 +475,11 @@
             "properties": {
               "id": {
                 "type": "string",
-                "faker": "string.uuid"
+                "fake": "string.uuid"
               },
               "total": {
                 "type": "number",
-                "faker": "number.float({min: 5, max: 500})"
+                "fake": "number.float({min: 5, max: 500})"
               },
               "status": {
                 "type": "string",
@@ -490,7 +491,7 @@
               },
               "placedAt": {
                 "type": "string",
-                "faker": "date.recent"
+                "fake": "date.recent"
               }
             },
             "required": [
@@ -522,15 +523,15 @@
             "properties": {
               "number": {
                 "type": "string",
-                "faker": "string.alpha({length: 8})"
+                "fake": "string.alpha({length: 8})"
               },
               "amountDue": {
                 "type": "number",
-                "faker": "number.float({min: 20, max: 2000})"
+                "fake": "number.float({min: 20, max: 2000})"
               },
               "dueAt": {
                 "type": "string",
-                "faker": "date.soon"
+                "fake": "date.soon"
               },
               "paid": {
                 "type": "boolean"

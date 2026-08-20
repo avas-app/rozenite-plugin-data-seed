@@ -5,8 +5,14 @@ import type { SchemaDocument, SchemaNode } from './schema'
  *
  * Deliberately has no `@faker-js/faker` dependency. Faker is several megabytes
  * for a panel that needs perhaps thirty generators, and bringing it in would
- * cost more than it gives. The token syntax below is faker-shaped on purpose so
- * the annotations read the way people expect, but the implementations are local.
+ * cost more than it gives. The token *names* below are faker-shaped on purpose,
+ * so `person.fullName` means what you would guess, but every implementation is
+ * local and this list is the whole of it.
+ *
+ * That is why the annotation is `@fake` and not `@faker`: the old spelling named
+ * a library that was never involved, which is misleading in exactly the place
+ * someone would go looking for faker's full API. `@faker` is still read, so no
+ * existing annotation breaks.
  *
  * Generation is seeded and therefore reproducible: the same schema and seed
  * produce the same object every time. That is what makes "reroll" a deliberate
@@ -122,12 +128,13 @@ function build(
     }, {})
   }
 
-  if (node.faker) {
-    const value = fromToken(node.faker, context.random)
+  const tag = readTag(node)
+  if (tag) {
+    const value = fromToken(tag.value, context.random)
     if (value !== undefined) return value
     context.warnings.push({
       path,
-      reason: `unknown @faker token "${node.faker}"${suggest(node.faker)}`,
+      reason: `unknown @${tag.tag} token "${tag.value}"${suggest(tag.value)}`,
     })
   }
 
@@ -216,7 +223,7 @@ function buildString(node: SchemaNode, context: Context, path: string): string {
   }
   // A bare `string` with no annotation and no format is genuinely ambiguous —
   // it may be a name, an ISO date, or an opaque id. Lorem is the honest answer;
-  // a `@faker` tag is how you make it something better.
+  // a `@fake` tag is how you make it something better.
   void path
   return token('lorem.words', context.random) as string
 }
@@ -250,7 +257,7 @@ function resolveRef(ref: string, document: SchemaDocument): SchemaNode | null {
   return document.definitions?.[decodeURIComponent(match[1])] ?? null
 }
 
-// ---- faker-shaped tokens ----
+// ---- tokens ----
 
 /**
  * Parses `namespace.method` or `namespace.method({"min":1})` and dispatches.
@@ -363,7 +370,7 @@ function token(
 function suggest(raw: string): string {
   const name = raw.trim().split('(')[0]
   const [namespace, method] = name.split('.')
-  const candidates = FAKER_TOKENS.filter((candidate) => {
+  const candidates = TOKEN_NAMES.filter((candidate) => {
     const [ns, m] = candidate.split('.')
     return ns === namespace || (method !== undefined && m === method)
   })
@@ -371,32 +378,79 @@ function suggest(raw: string): string {
   return `. Did you mean ${candidates.slice(0, 3).join(', ')}?`
 }
 
-/** The tokens `@faker` understands, for documentation and panel hints. */
-export const FAKER_TOKENS = [
-  'person.firstName',
-  'person.lastName',
-  'person.fullName',
-  'internet.email',
-  'internet.userName',
-  'internet.url',
-  'image.avatar',
-  'string.uuid',
-  'string.alpha',
-  'lorem.words',
-  'lorem.sentence',
-  'lorem.paragraph',
-  'date.recent',
-  'date.past',
-  'date.soon',
-  'date.future',
-  'number.int',
-  'number.float',
-  'datatype.boolean',
-  'phone.number',
-  'location.city',
-  'location.country',
-  'location.streetAddress',
-] as const
+/**
+ * The annotation on a node, and which spelling it used.
+ *
+ * `@fake` is canonical; `@faker` is the original spelling and still works. The
+ * spelling is reported back so the shape preview can echo what the source
+ * actually says rather than quietly rewriting it.
+ */
+export function readTag(node: SchemaNode): { tag: 'fake' | 'faker'; value: string } | null {
+  if (typeof node.fake === 'string' && node.fake.trim()) {
+    return { tag: 'fake', value: node.fake }
+  }
+  if (typeof node.faker === 'string' && node.faker.trim()) {
+    return { tag: 'faker', value: node.faker }
+  }
+  return null
+}
+
+export type TokenDoc = {
+  token: string
+  /** What it produces, in one phrase. */
+  summary: string
+  /** Named arguments and their defaults, when it takes any. */
+  args?: string
+}
+
+/**
+ * Every token, with what it does — the single source of truth.
+ *
+ * The README table and the panel's reference are both built from this, and the
+ * examples in them are produced by actually running `token()`. A hand-written
+ * list of what a generator emits is wrong the first time someone edits the
+ * generator and forgets the docs.
+ */
+export const TOKENS: readonly TokenDoc[] = [
+  { token: 'person.firstName', summary: 'A first name' },
+  { token: 'person.lastName', summary: 'A surname' },
+  { token: 'person.fullName', summary: 'A first name and surname' },
+  { token: 'internet.email', summary: 'An address at example.com' },
+  { token: 'internet.userName', summary: 'A lowercase handle with digits' },
+  { token: 'internet.url', summary: 'An https URL' },
+  { token: 'image.avatar', summary: 'An avatar image URL' },
+  { token: 'string.uuid', summary: 'A v4-shaped UUID' },
+  { token: 'string.alpha', summary: 'Letters only', args: 'length = 8' },
+  { token: 'lorem.words', summary: 'Space-separated words', args: 'count = 3' },
+  { token: 'lorem.sentence', summary: 'One capitalised sentence', args: 'count = 8' },
+  { token: 'lorem.paragraph', summary: 'Three sentences' },
+  { token: 'date.recent', summary: 'ISO timestamp, within the last week' },
+  { token: 'date.past', summary: 'ISO timestamp, within the last year' },
+  { token: 'date.soon', summary: 'ISO timestamp, within the next week' },
+  { token: 'date.future', summary: 'ISO timestamp, within the next year' },
+  { token: 'number.int', summary: 'A whole number', args: 'min = 1, max = 1000' },
+  { token: 'number.float', summary: 'A number with two decimals', args: 'min = 0, max = 1' },
+  { token: 'datatype.boolean', summary: 'true or false' },
+  { token: 'phone.number', summary: 'A +1 555 number' },
+  { token: 'location.city', summary: 'A city name' },
+  { token: 'location.country', summary: 'A country name' },
+  { token: 'location.streetAddress', summary: 'A street address' },
+]
+
+/** Just the names, for `suggest()` and for validating an annotation. */
+export const TOKEN_NAMES: readonly string[] = TOKENS.map((entry) => entry.token)
+
+/**
+ * One example of what a token produces, generated by running it.
+ *
+ * Seeded per token so the value is stable across runs — a docs table that
+ * churns on every build stops being regenerated.
+ */
+export function sampleToken(name: string, seed = 'docs'): string {
+  const value = token(name, makeRandom(`${seed}:${name}`))
+  if (value === undefined) return ''
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
 
 // ---- deterministic randomness ----
 

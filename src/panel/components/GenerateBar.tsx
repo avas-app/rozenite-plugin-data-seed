@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Button, Input } from '@rozenite/ui'
-import { AlertTriangle, ChevronDown, ChevronRight, Dices } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Dices, Tags } from 'lucide-react'
 
 import type { GenerateWarning } from '../../shared/generate'
+import { TOKENS, sampleToken } from '../../shared/generate'
 
 /**
  * Controls for generating a value from the query's extracted schema.
@@ -35,6 +36,7 @@ export function GenerateBar({
   onGenerate: () => void
 }) {
   const [showShape, setShowShape] = useState(false)
+  const [showTokens, setShowTokens] = useState(false)
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border px-3 py-2">
@@ -93,11 +95,28 @@ export function GenerateBar({
           />
         </label>
 
+        {/*
+          The token reference belongs here rather than only in the README: the
+          moment you want it is while looking at a field the shape shows as
+          plain `string`, deciding what to annotate it with.
+        */}
+        <Button
+          aria-label="@fake tokens"
+          onClick={() => setShowTokens((open) => !open)}
+          size="compact"
+          title="@fake tokens"
+          variant="outline"
+        >
+          <Tags className="size-3.5" />
+        </Button>
+
         <Button disabled={loading} onClick={onGenerate} size="compact">
           <Dices className="size-3.5" />
           {loading ? 'Loading…' : 'Generate'}
         </Button>
       </div>
+
+      {showTokens ? <TokenReference /> : null}
 
       {showShape && shape ? (
         <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 font-mono text-[11px] leading-relaxed text-foreground">
@@ -125,6 +144,41 @@ export function GenerateBar({
           ) : null}
         </ul>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * Every `@fake` token, with a live example.
+ *
+ * Built from the same catalogue the generator uses, and the examples are
+ * produced by running it — so this pane cannot claim an output the generator
+ * does not actually produce.
+ */
+function TokenReference() {
+  return (
+    <div className="max-h-64 overflow-auto rounded-md bg-muted p-3">
+      <p className="mb-2 font-mono text-[11px] text-muted-foreground">
+        {'/** @fake person.fullName */'} — arguments are JSON:{' '}
+        {'number.int({min: 1, max: 10})'}
+      </p>
+      <table className="w-full border-collapse text-[11px]">
+        <tbody>
+          {TOKENS.map((entry) => (
+            <tr key={entry.token} className="align-top">
+              <td className="whitespace-nowrap py-0.5 pr-3 font-mono text-foreground">
+                {entry.token}
+              </td>
+              <td className="whitespace-nowrap py-0.5 pr-3 font-mono text-muted-foreground">
+                {entry.args ?? ''}
+              </td>
+              <td className="w-full truncate py-0.5 font-mono text-muted-foreground">
+                {sampleToken(entry.token)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

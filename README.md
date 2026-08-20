@@ -17,7 +17,7 @@ Plus:
 
 - **Committed fixtures** that ride in the app bundle, so teammates get them with
   no setup.
-- **Generate from your TypeScript types**, annotated in-source with JSDoc.
+- **Generate from your TypeScript types**, annotated in-source with `@fake` JSDoc tags.
 - **Drive it headlessly** from a script or an E2E run, with no DevTools open.
 
 ## Install
@@ -338,9 +338,9 @@ in the source:
 type ApiResponse<Todo[]> = {
   data: {
     id: number
-    title: string  // @faker lorem.sentence
+    title: string  // @fake lorem.sentence
     done: boolean
-    createdAt: string  // @faker date.recent
+    createdAt: string  // @fake date.recent
   }[]
   meta: {
     requestId: string
@@ -350,7 +350,7 @@ type ApiResponse<Todo[]> = {
 ```
 
 Two things it shows that the source does not, at least not at a glance: which
-fields carry a `@faker` annotation, and which are `any` — the second matters
+fields carry a `@fake` annotation, and which are `any` — the second matters
 because those are exactly the fields generation has to leave `null`.
 
 Types used once are inlined to keep it short. Shared, recursive and union types
@@ -387,13 +387,13 @@ itself:
 
 ```ts
 export type User = {
-  /** @faker number.int({min: 1, max: 9999}) */
+  /** @fake number.int({min: 1, max: 9999}) */
   id: number
-  /** @faker person.fullName */
+  /** @fake person.fullName */
   name: string
-  /** @faker internet.email */
+  /** @fake internet.email */
   email: string
-  /** @faker date.past */
+  /** @fake date.past */
   createdAt: string
 }
 ```
@@ -402,15 +402,57 @@ Annotations live in the source **deliberately**. A sidecar file keyed by type
 path rots silently the moment someone renames a field; a JSDoc tag cannot
 desync, gets reviewed in the same diff as the field, and survives refactors.
 
-Available tokens: `person.*` (firstName, lastName, fullName), `internet.*`
-(email, userName, url), `image.avatar`, `string.*` (uuid, alpha), `lorem.*`
-(words, sentence, paragraph), `date.*` (recent, past, soon, future), `number.*`
-(int, float), `datatype.boolean`, `phone.number`, `location.*` (city, country,
-streetAddress). Arguments are JSON: `number.int({min: 1, max: 10})`.
+**The tag is `@fake`, not `@faker`.** There is no `@faker-js/faker` dependency —
+it is several megabytes for perhaps thirty generators, and the token *names*
+below are faker-shaped only so they read the way you would guess. Naming the tag
+after a library that was never involved sent people looking for faker's full API,
+of which this implements a small, fixed subset. `@faker` is still read, so
+existing annotations keep working and there is nothing to migrate.
 
-There is no `@faker-js/faker` dependency — it is several megabytes for perhaps
-thirty generators. The token syntax is faker-shaped so it reads the way you
-expect; the implementations are local.
+### Every token
+
+There is no larger set behind this — the table is the whole vocabulary.
+Arguments are JSON: `number.int({min: 1, max: 10})`.
+
+Run **`npx data-seed tokens`** for the same list in your terminal, or click the
+tag button next to **Generate** in the panel — which is usually the moment you
+want it, since you are looking at a field the shape preview shows as plain
+`string` and deciding what to make it.
+
+<!-- tokens:start -->
+
+| Token | Produces | Arguments | Example |
+| --- | --- | --- | --- |
+| `person.firstName` | A first name |  | `Ken` |
+| `person.lastName` | A surname |  | `Thompson` |
+| `person.fullName` | A first name and surname |  | `Grace Johnson` |
+| `internet.email` | An address at example.com |  | `linus.turing@example.com` |
+| `internet.userName` | A lowercase handle with digits |  | `ken86` |
+| `internet.url` | An https URL |  | `https://example.com/ipsum` |
+| `image.avatar` | An avatar image URL |  | `https://example.com/avatars/81.png` |
+| `string.uuid` | A v4-shaped UUID |  | `6da50278-a631-4ed2-ccd3-47d20409e072` |
+| `string.alpha` | Letters only | `length = 8` | `elit` |
+| `lorem.words` | Space-separated words | `count = 3` | `amet dolor lorem` |
+| `lorem.sentence` | One capitalised sentence | `count = 8` | `Sit amet dolor consectetur adipiscing ipsum amet ad…` |
+| `lorem.paragraph` | Three sentences |  | `Dolor elit sit lorem amet elit dolor ipsum lorem lo…` |
+| `date.recent` | ISO timestamp, within the last week |  | `2025-12-31T06:51:51.901Z` |
+| `date.past` | ISO timestamp, within the last year |  | `2025-11-04T18:19:29.576Z` |
+| `date.soon` | ISO timestamp, within the next week |  | `2026-01-03T06:07:16.830Z` |
+| `date.future` | ISO timestamp, within the next year |  | `2026-03-19T08:07:35.241Z` |
+| `number.int` | A whole number | `min = 1, max = 1000` | `959` |
+| `number.float` | A number with two decimals | `min = 0, max = 1` | `0.29` |
+| `datatype.boolean` | true or false |  | `true` |
+| `phone.number` | A +1 555 number |  | `+1 555 7087` |
+| `location.city` | A city name |  | `Osaka` |
+| `location.country` | A country name |  | `Portugal` |
+| `location.streetAddress` | A street address |  | `597 Lovelace Street` |
+
+<!-- tokens:end -->
+
+Anything not in that list warns rather than silently substituting something, and
+the warning names the closest match — misremembering `name.fullName` for
+`person.fullName` is the common case, and it says so instead of sending you back
+here.
 
 ### What it tells you it could not do
 
@@ -422,7 +464,7 @@ Generation is reported honestly rather than papered over:
   count and a price all extract identically; most API numbers are integers, and
   `"id": 839.05` reads as broken data. Use `@faker number.float` for decimals.
 - **Recursive types stop at a depth cap**, so a comment tree terminates.
-- **Unknown `@faker` tokens** warn instead of silently substituting something.
+- **Unknown `@fake` tokens** warn instead of silently substituting something.
 
 Generation is seeded, so the same target and roll always produce the same value —
 pressing **Generate** again is what rerolls it.
@@ -530,10 +572,11 @@ TypeScript-to-JSON-Schema extraction.
 
 ```bash
 bun install
-bun test        # 176 tests
+bun test        # 186 tests
 bun typecheck
 bun run build
 bun run presets # regenerate rozenite.config.ts dev presets
+bun run docs    # regenerate the token table in this README
 ```
 
 `bun dev` starts Rozenite's browser dev host on

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { generate } from '../generate'
+import { TOKENS, TOKEN_NAMES, generate, readTag, sampleToken } from '../generate'
 import type { SchemaDocument } from '../schema'
 
 const doc = (schema: SchemaDocument): SchemaDocument => schema
@@ -9,7 +9,7 @@ describe('determinism', () => {
   test('the same seed always produces the same value', () => {
     const schema = doc({
       type: 'object',
-      properties: { name: { type: 'string', faker: 'person.fullName' } },
+      properties: { name: { type: 'string', fake: 'person.fullName' } },
     })
     const a = generate(schema, { seed: 'abc' }).value
     const b = generate(schema, { seed: 'abc' }).value
@@ -17,7 +17,7 @@ describe('determinism', () => {
   })
 
   test('different seeds produce different values', () => {
-    const schema = doc({ type: 'string', faker: 'person.fullName' })
+    const schema = doc({ type: 'string', fake: 'person.fullName' })
     const values = new Set(
       ['a', 'b', 'c', 'd', 'e'].map((seed) => generate(schema, { seed }).value),
     )
@@ -25,7 +25,7 @@ describe('determinism', () => {
   })
 
   test('dates do not depend on the current time', () => {
-    const schema = doc({ type: 'string', faker: 'date.recent' })
+    const schema = doc({ type: 'string', fake: 'date.recent' })
     const first = generate(schema, { seed: 'x' }).value
     expect(generate(schema, { seed: 'x' }).value).toBe(first as string)
     expect(String(first)).toMatch(/^\d{4}-\d{2}-\d{2}T/)
@@ -40,7 +40,7 @@ describe('scalars', () => {
 
   test('number.float opts back into decimals', () => {
     const values = Array.from({ length: 12 }, (_, i) =>
-      generate(doc({ type: 'number', faker: 'number.float({min: 0, max: 1})' }), {
+      generate(doc({ type: 'number', fake: 'number.float({min: 0, max: 1})' }), {
         seed: `s${i}`,
       }).value as number,
     )
@@ -51,7 +51,7 @@ describe('scalars', () => {
   test('number.int honours its bounds', () => {
     for (let i = 0; i < 20; i++) {
       const value = generate(
-        doc({ type: 'number', faker: 'number.int({min: 5, max: 9})' }),
+        doc({ type: 'number', fake: 'number.int({min: 5, max: 9})' }),
         { seed: `s${i}` },
       ).value as number
       expect(value).toBeGreaterThanOrEqual(5)
@@ -176,23 +176,23 @@ describe('warnings', () => {
     expect(warnings[0].reason).toMatch(/any/)
   })
 
-  test('an unknown @faker token warns and falls back', () => {
+  test('an unknown @fake token warns and falls back', () => {
     const { warnings } = generate(
-      doc({ type: 'string', faker: 'nope.notAThing' }),
+      doc({ type: 'string', fake: 'nope.notAThing' }),
       { seed: 's' },
     )
-    expect(warnings[0].reason).toMatch(/unknown @faker token/)
+    expect(warnings[0].reason).toMatch(/unknown @fake token/)
   })
 
   test('a misspelt token suggests the real one', () => {
     const wrongNamespace = generate(
-      doc({ type: 'string', faker: 'name.fullName' }),
+      doc({ type: 'string', fake: 'name.fullName' }),
       { seed: 's' },
     )
     expect(wrongNamespace.warnings[0].reason).toMatch(/person\.fullName/)
 
     const wrongMethod = generate(
-      doc({ type: 'string', faker: 'person.nope' }),
+      doc({ type: 'string', fake: 'person.nope' }),
       { seed: 's' },
     )
     expect(wrongMethod.warnings[0].reason).toMatch(/person\.firstName/)
@@ -204,5 +204,81 @@ describe('warnings', () => {
     })
     expect(value).toBeNull()
     expect(warnings[0].reason).toMatch(/unresolved/)
+  })
+})
+
+describe('the @fake tag', () => {
+  test('@faker is still read, so old annotations keep working', () => {
+    const { value, warnings } = generate(
+      doc({ type: 'string', faker: 'person.fullName' }),
+    )
+    expect(String(value)).toMatch(/^\w+ \w+$/)
+    expect(warnings).toEqual([])
+  })
+
+  test('@fake wins when a field somehow carries both', () => {
+    const { value } = generate(
+      doc({ type: 'string', fake: 'person.firstName', faker: 'lorem.paragraph' }),
+    )
+    // A paragraph would be long; a first name is one word.
+    expect(String(value).split(' ')).toHaveLength(1)
+  })
+
+  test('the warning names the spelling that was actually used', () => {
+    expect(
+      generate(doc({ type: 'string', faker: 'nope.notAThing' })).warnings[0].reason,
+    ).toMatch(/unknown @faker token/)
+    expect(
+      generate(doc({ type: 'string', fake: 'nope.notAThing' })).warnings[0].reason,
+    ).toMatch(/unknown @fake token/)
+  })
+
+  test('an empty tag is ignored rather than warned about', () => {
+    const { value, warnings } = generate(doc({ type: 'string', fake: '  ' }))
+    expect(typeof value).toBe('string')
+    expect(warnings).toEqual([])
+  })
+
+  test('readTag reports which spelling was used', () => {
+    expect(readTag({ fake: 'a.b' })).toEqual({ tag: 'fake', value: 'a.b' })
+    expect(readTag({ faker: 'a.b' })).toEqual({ tag: 'faker', value: 'a.b' })
+    expect(readTag({ type: 'string' })).toBeNull()
+  })
+})
+
+describe('the token catalogue', () => {
+  test('every documented token actually produces a value', () => {
+    const dead = TOKENS.filter((entry) => sampleToken(entry.token) === '')
+    expect(dead).toEqual([])
+  })
+
+  test('every documented token generates without warning', () => {
+    for (const entry of TOKENS) {
+      const { warnings } = generate(doc({ type: 'string', fake: entry.token }))
+      expect(warnings).toEqual([])
+    }
+  })
+
+  /**
+   * The catalogue is what the README table, the panel reference and
+   * `data-seed tokens` all render. An implemented-but-undocumented token would
+   * work and be invisible, which is the drift worth failing a build over — so
+   * this reads the switch in `token()` rather than trusting the list.
+   */
+  test('no token is implemented without being documented', async () => {
+    const source = await Bun.file(
+      new URL('../generate.ts', import.meta.url).pathname,
+    ).text()
+    const implemented = Array.from(
+      source.matchAll(/^\s*case '([a-z]+\.[A-Za-z]+)':/gm),
+      (match) => match[1],
+    )
+    expect(implemented.length).toBeGreaterThan(0)
+    const undocumented = implemented.filter((name) => !TOKEN_NAMES.includes(name))
+    expect(undocumented).toEqual([])
+  })
+
+  test('sample output is stable, so the docs do not churn', () => {
+    expect(sampleToken('person.fullName')).toBe(sampleToken('person.fullName'))
   })
 })

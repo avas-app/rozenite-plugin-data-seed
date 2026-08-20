@@ -33,23 +33,23 @@ export type ApiResponse<T> = {
 
 export type Todo = {
   id: number
-  /** @faker lorem.sentence */
+  /** @fake lorem.sentence */
   title: string
   done: boolean
-  /** @faker date.recent */
+  /** @fake date.recent */
   createdAt: string
 }
 
 export type User = {
-  /** @faker number.int({min: 1, max: 9999}) */
+  /** @fake number.int({min: 1, max: 9999}) */
   id: number
-  /** @faker person.fullName */
+  /** @fake person.fullName */
   name: string
-  /** @faker internet.email */
+  /** @fake internet.email */
   email: string
-  /** @faker image.avatar */
+  /** @fake image.avatar */
   avatarUrl: string
-  /** @faker date.past */
+  /** @fake date.past */
   createdAt: string
 }
 
@@ -62,11 +62,16 @@ export type Settings = {
 /** Self-recursive: a comment thread of unbounded depth. */
 export type Comment = {
   id: number
-  /** @faker internet.userName */
+  /**
+   * Deliberately still on the original `@faker` spelling, so the example
+   * exercises the alias rather than the README only claiming it works.
+   *
+   * @faker internet.userName
+   */
   author: string
-  /** @faker lorem.paragraph */
+  /** @fake lorem.paragraph */
   body: string
-  /** @faker date.recent */
+  /** @fake date.recent */
   createdAt: string
   replies: Comment[]
 }
@@ -85,32 +90,32 @@ export type Comment = {
  *   Invoice  — `expo/fetch`, native, wrapped by hand with `seedableFetch`
  */
 export type Profile = {
-  /** @faker person.fullName */
+  /** @fake person.fullName */
   name: string
-  /** @faker internet.email */
+  /** @fake internet.email */
   email: string
-  /** @faker number.int({min: 0, max: 50000}) */
+  /** @fake number.int({min: 0, max: 50000}) */
   followers: number
-  /** @faker date.past */
+  /** @fake date.past */
   joinedAt: string
 }
 
 export type Order = {
-  /** @faker string.uuid */
+  /** @fake string.uuid */
   id: string
-  /** @faker number.float({min: 5, max: 500}) */
+  /** @fake number.float({min: 5, max: 500}) */
   total: number
   status: 'pending' | 'shipped' | 'delivered'
-  /** @faker date.recent */
+  /** @fake date.recent */
   placedAt: string
 }
 
 export type Invoice = {
-  /** @faker string.alpha({length: 8}) */
+  /** @fake string.alpha({length: 8}) */
   number: string
-  /** @faker number.float({min: 20, max: 2000}) */
+  /** @fake number.float({min: 20, max: 2000}) */
   amountDue: number
-  /** @faker date.soon */
+  /** @fake date.soon */
   dueAt: string
   paid: boolean
 }

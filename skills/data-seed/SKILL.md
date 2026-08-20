@@ -113,6 +113,12 @@ this way. The error names what *is* installed.
 typed `any` or `unknown` generates `null` and warns, because there is nothing to
 generate from. If a screen needs that field, seed it explicitly instead.
 
+An `unknown @fake token` warning means the app's own source has a bad
+annotation. `npx data-seed tokens` prints the whole vocabulary with examples;
+the warning also names the closest match. The tag is `@fake` — `@faker` is the
+original spelling and still works, but no faker library is involved and only the
+listed tokens exist.
+
 **`problems` from `list-fixtures`** are malformed fixture files, reported by name
 so a typo is visible rather than silently absent.
 
@@ -153,3 +159,6 @@ for `fetch` and axios;
 `generate-seed` work. None is required for a plain `apply-seed` against an
 installed adapter. Schemas come from `npx data-seed extract`, which reads
 `data-seed.config.json`.
+
+Field-level values are controlled by `@fake` JSDoc tags in the app's own types
+(`/** @fake person.fullName */`). `npx data-seed tokens` lists every one.

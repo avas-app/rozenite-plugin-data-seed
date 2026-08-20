@@ -23,6 +23,16 @@ import { PLUGIN_ID } from './src/shared/types'
 
 export { seedToolDefinitions, PLUGIN_ID }
 
+/**
+ * The `@fake` token catalogue, and a way to see what each one produces.
+ *
+ * Exported from the Node entry because `data-seed tokens` prints it — the CLI
+ * is plain `.mjs` and cannot read the TypeScript source, and duplicating the
+ * list there is exactly the drift this catalogue exists to prevent.
+ */
+export { TOKENS, TOKEN_NAMES, sampleToken } from './src/shared/generate'
+export type { TokenDoc } from './src/shared/generate'
+
 /** Tool descriptors bound to this plugin's domain, for `session.callTool`. */
 export const seedTools = defineAgentToolDescriptors(
   PLUGIN_ID,

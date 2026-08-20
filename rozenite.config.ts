@@ -408,9 +408,9 @@ export default {
                       },
                       "schema": {
                             "$schema": "http://json-schema.org/draft-07/schema#",
-                            "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1651-api.ts-0-7844%5B%5D%3E",
+                            "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1649-api.ts-0-7984%5B%5D%3E",
                             "definitions": {
-                                  "ApiResponse<def-alias-api.ts-1503-1651-api.ts-0-7844[]>": {
+                                  "ApiResponse<def-alias-api.ts-1503-1649-api.ts-0-7984[]>": {
                                         "type": "object",
                                         "properties": {
                                               "data": {
@@ -451,14 +451,14 @@ export default {
                                               },
                                               "title": {
                                                     "type": "string",
-                                                    "faker": "lorem.sentence"
+                                                    "fake": "lorem.sentence"
                                               },
                                               "done": {
                                                     "type": "boolean"
                                               },
                                               "createdAt": {
                                                     "type": "string",
-                                                    "faker": "date.recent"
+                                                    "fake": "date.recent"
                                               }
                                         },
                                         "required": [
@@ -491,19 +491,19 @@ export default {
                                         "properties": {
                                               "name": {
                                                     "type": "string",
-                                                    "faker": "person.fullName"
+                                                    "fake": "person.fullName"
                                               },
                                               "email": {
                                                     "type": "string",
-                                                    "faker": "internet.email"
+                                                    "fake": "internet.email"
                                               },
                                               "followers": {
                                                     "type": "number",
-                                                    "faker": "number.int({min: 0, max: 50000})"
+                                                    "fake": "number.int({min: 0, max: 50000})"
                                               },
                                               "joinedAt": {
                                                     "type": "string",
-                                                    "faker": "date.past"
+                                                    "fake": "date.past"
                                               }
                                         },
                                         "required": [

@@ -1,4 +1,5 @@
 import type { SchemaDocument, SchemaNode } from './schema'
+import { readTag } from './generate'
 
 /**
  * Renders an extracted JSON Schema back into readable TypeScript.
@@ -9,7 +10,7 @@ import type { SchemaDocument, SchemaNode } from './schema'
  * knows, and it is what they would have gone looking for.
  *
  * Two things it surfaces that the source does not, at least not at a glance:
- * which fields carry a `@faker` annotation, and which are `any`. The second
+ * which fields carry a `@fake` annotation, and which are `any`. The second
  * matters because those are exactly the fields generation cannot fill.
  */
 
@@ -148,7 +149,11 @@ function renderObject(
   const lines = entries.map(([key, child]) => {
     const optional = required.has(key) ? '' : '?'
     const rendered = render(child, definitions, named, depth + 1, expanding)
-    const annotation = child.faker ? `  // @faker ${child.faker}` : ''
+    // Echoes the spelling the source used rather than normalising to `@fake`:
+    // this is a preview of the type as written, and silently rewriting it would
+    // send you looking for a line that says something else.
+    const tag = readTag(child)
+    const annotation = tag ? `  // @${tag.tag} ${tag.value}` : ''
     return `${pad}${key}${optional}: ${rendered}${annotation}`
   })
 
