@@ -335,3 +335,45 @@ describe('lifecycle', () => {
     expect(network).toHaveLength(0)
   })
 })
+
+describe('an app handler that throws', () => {
+  test('does not stop the rest of the event sequence', async () => {
+    // A client waiting on `loadend` — axios does — would otherwise never
+    // settle: the request hangs forever instead of failing, which is the worse
+    // of the two outcomes because nothing times out and nothing reports.
+    const { session } = setup()
+    session.apply(routeTarget('GET', '/api/todos'), [{ id: 1 }])
+
+    const seen: string[] = []
+    const xhr = new (globalThis as unknown as { XMLHttpRequest: new () => any })
+      .XMLHttpRequest()
+    xhr.onreadystatechange = () => {
+      seen.push('readystatechange')
+      throw new Error('app handler blew up')
+    }
+    xhr.onload = () => seen.push('load')
+    xhr.onloadend = () => seen.push('loadend')
+
+    xhr.open('GET', 'https://api.example.com/api/todos')
+    xhr.send()
+    await settled()
+
+    expect(seen).toEqual(['readystatechange', 'load', 'loadend'])
+    expect(xhr.status).toBe(200)
+    expect(network).toHaveLength(0)
+  })
+
+  test('still lets axios resolve a seeded response', async () => {
+    const { session } = setup()
+    session.apply(routeTarget('GET', '/api/todos'), [{ id: 7 }])
+
+    const response = await axios.get('https://api.example.com/api/todos', {
+      adapter: 'xhr',
+      onDownloadProgress: () => {
+        throw new Error('app callback blew up')
+      },
+    })
+
+    expect(response.data).toEqual([{ id: 7 }])
+  })
+})

@@ -105,7 +105,9 @@ export function SeedEditor({
   const parsed = parse(value)
   const isRoute = target.ref.kind === 'route'
   const parsedStatus = Number.parseInt(status, 10)
-  const statusValid = Number.isFinite(parsedStatus) && parsedStatus >= 100 && parsedStatus <= 599
+  // 200–599, not 100–599: a `Response` cannot be constructed with a 1xx status,
+  // so offering one here would just be a seed that never applies.
+  const statusValid = Number.isFinite(parsedStatus) && parsedStatus >= 200 && parsedStatus <= 599
   const meta: SeedMeta | undefined =
     isRoute && statusValid && parsedStatus !== 200 ? { status: parsedStatus } : undefined
   const seedTarget: SeedTarget = {

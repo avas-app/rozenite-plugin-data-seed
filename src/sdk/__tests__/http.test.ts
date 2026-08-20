@@ -344,3 +344,43 @@ describe('seedableFetch', () => {
     expect(calls).toHaveLength(2)
   })
 })
+
+/**
+ * Everything in this block is about the same hazard: these interceptors run
+ * inside the app's own `fetch`/`send`, so a fault in ours surfaces as the app's
+ * request failing — in code that has nothing to do with this plugin.
+ */
+describe('never breaking the app it is debugging', () => {
+  test('a status no Response can carry falls back to 200 instead of throwing', async () => {
+    // 1xx is the easy mistake: it is a real HTTP range, so it looks valid, and
+    // every Response constructor rejects it with a RangeError.
+    const { session, calls } = setup()
+    session.apply(routeTarget('GET', '/api/todos'), [{ id: 1 }], { status: 150 })
+
+    const response = await fetch('https://api.example.com/api/todos')
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([{ id: 1 }])
+    expect(calls).toHaveLength(0)
+  })
+
+  test.each([0, 99, 600, 1000, Number.NaN, 1.5e308])(
+    'status %p does not escape into the caller',
+    async (status) => {
+      const { session } = setup()
+      session.apply(routeTarget('GET', '/api/todos'), [{ id: 1 }], {
+        status: status as number,
+      })
+      const response = await fetch('https://api.example.com/api/todos')
+      expect(response.status).toBeGreaterThanOrEqual(200)
+      expect(response.status).toBeLessThanOrEqual(599)
+    },
+  )
+
+  test('a status it can carry is still passed through untouched', async () => {
+    const { session } = setup()
+    session.apply(routeTarget('GET', '/api/todos'), { message: 'nope' }, { status: 503 })
+    const response = await fetch('https://api.example.com/api/todos')
+    expect(response.status).toBe(503)
+  })
+})

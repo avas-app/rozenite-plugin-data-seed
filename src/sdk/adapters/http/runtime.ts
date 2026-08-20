@@ -251,15 +251,50 @@ export function routeIdentity(method: string, url: string): string {
   return formatRoutePattern(parseRoutePattern(`${method} ${url}`))
 }
 
+/**
+ * The lowest and highest status a `Response` can be constructed with.
+ *
+ * Outside this range the constructor throws a `RangeError` — and it would throw
+ * on the app's own `fetch` call stack, turning a bad number in a seed into a
+ * broken request in code that has nothing to do with this plugin. 1xx is the
+ * easy mistake to make: it is a real HTTP range, so it looks valid, and every
+ * `Response` implementation still rejects it.
+ */
+export const MIN_SEED_STATUS = 200
+export const MAX_SEED_STATUS = 599
+
 export function seedStatus(seed: Seed): number {
   const status = (seed.meta as { status?: number } | undefined)?.status
-  return typeof status === 'number' ? status : 200
+  if (typeof status !== 'number' || !Number.isFinite(status)) return 200
+  const whole = Math.trunc(status)
+  if (whole < MIN_SEED_STATUS || whole > MAX_SEED_STATUS) return 200
+  return whole
 }
 
 /** A non-2xx is not a thrown error, but it is still what you want to see. */
 export function httpErrorText(status: number | undefined): string | undefined {
   if (status === undefined || (status >= 200 && status < 400)) return undefined
   return `HTTP ${status}`
+}
+
+/**
+ * Records an outcome, never failing the request to do it.
+ *
+ * Both interceptors run inside the app's own call stack, and on the success
+ * path the app's request has already succeeded by the time we record it. A
+ * throw would turn a working request into a failed one purely because the
+ * panel's bookkeeping went wrong.
+ */
+export function settleQuietly(
+  runtime: HttpRuntime,
+  entry: Parameters<HttpRuntime['settle']>[0],
+  outcome: Parameters<HttpRuntime['settle']>[1],
+): void {
+  try {
+    runtime.settle(entry, outcome)
+  } catch {
+    // The panel loses one row's detail. The app loses nothing.
+  }
 }
 
 export function errorMessage(error: unknown): string {

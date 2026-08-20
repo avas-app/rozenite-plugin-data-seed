@@ -4,6 +4,7 @@ import {
   errorMessage,
   seedBodyText,
   seedStatus,
+  settleQuietly,
   statusText,
 } from './runtime'
 
@@ -92,23 +93,40 @@ export function patchXhr(): () => void {
     if (!runtime || !pending || runtime.inPassthrough) {
       return originalSend.call(this, body)
     }
-    if (!runtime.shouldWatch(pending.method, pending.url)) {
+    // All of this runs inside the app's own `send()`, so anything that throws
+    // here fails the app's request. Whatever goes wrong, the fallback is the
+    // request the app actually asked for.
+    let entry: ReturnType<HttpRuntime['observe']>
+    let seed: ReturnType<HttpRuntime['matchSeed']>
+    try {
+      if (!runtime.shouldWatch(pending.method, pending.url)) {
+        return originalSend.call(this, body)
+      }
+      entry = runtime.observe(pending.method, pending.url)
+      seed = runtime.matchSeed(pending.method, pending.url)
+    } catch {
       return originalSend.call(this, body)
     }
 
-    const entry = runtime.observe(pending.method, pending.url)
-    const seed = runtime.matchSeed(pending.method, pending.url)
-
     if (seed) {
-      const status = seedStatus(seed)
-      runtime.settle(entry, { status, body: seed.data })
-      respondWith(this, pending, seedBodyText(seed.data), status)
-      return
+      try {
+        const status = seedStatus(seed)
+        const text = seedBodyText(seed.data)
+        respondWith(this, pending, text, status)
+        settleQuietly(runtime, entry, { status, body: seed.data })
+        return
+      } catch {
+        return originalSend.call(this, body)
+      }
     }
 
     entry.inFlight += 1
-    runtime.changed()
-    observeReal(this, runtime, entry)
+    try {
+      runtime.changed()
+      observeReal(this, runtime, entry)
+    } catch {
+      // Only the panel misses this request.
+    }
     return originalSend.call(this, body)
   }
 
@@ -209,10 +227,12 @@ function respondWith(
 
   // Asynchronous, because a real XHR never completes before `send` returns and
   // callers routinely attach handlers on the line after it.
+  // Each event is fired independently: an app handler that throws on
+  // `readystatechange` must not stop `load` and `loadend`, or a client waiting
+  // on `loadend` — axios does — never settles and the request hangs forever
+  // rather than failing.
   const emit = () => {
-    fire(xhr, 'readystatechange')
-    fire(xhr, 'load')
-    fire(xhr, 'loadend')
+    for (const type of ['readystatechange', 'load', 'loadend']) fire(xhr, type)
   }
   if (typeof queueMicrotask === 'function') queueMicrotask(emit)
   else setTimeout(emit, 0)
@@ -264,6 +284,12 @@ function fire(xhr: XhrLike, type: string): void {
     }
   }
   if (typeof handler === 'function') {
-    ;(handler as (event: unknown) => void).call(xhr, event)
+    try {
+      ;(handler as (event: unknown) => void).call(xhr, event)
+    } catch (error) {
+      // Same reason as the dispatch above: this is the app's listener failing,
+      // and it must not take the rest of the event sequence with it.
+      void errorMessage(error)
+    }
   }
 }

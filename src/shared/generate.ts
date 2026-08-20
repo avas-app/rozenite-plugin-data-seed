@@ -262,7 +262,17 @@ function terminate(node: SchemaNode): unknown {
 function resolveRef(ref: string, document: SchemaDocument): SchemaNode | null {
   const match = /^#\/definitions\/(.+)$/.exec(ref)
   if (!match) return null
-  return document.definitions?.[decodeURIComponent(match[1])] ?? null
+  // A hand-edited schemas file can hold a `$ref` that is not valid percent
+  // encoding, and `decodeURIComponent` throws on those rather than returning
+  // the input. The caller turns a null into a warning it can show; an exception
+  // escapes into the panel's render and takes the whole panel down.
+  let name: string
+  try {
+    name = decodeURIComponent(match[1])
+  } catch {
+    name = match[1]
+  }
+  return document.definitions?.[name] ?? null
 }
 
 // ---- tokens ----

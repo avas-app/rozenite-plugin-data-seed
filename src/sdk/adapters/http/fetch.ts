@@ -7,6 +7,7 @@ import {
   publishFetchHook,
   seedBodyText,
   seedStatus,
+  settleQuietly,
   statusText,
 } from './runtime'
 
@@ -127,19 +128,40 @@ function intercept(
   }
 
   const { method, url } = request
-  if (!runtime.shouldWatch(method, url)) return impl.call(thisArg, input, init)
 
-  const entry = runtime.observe(method, url)
-  const seed = runtime.matchSeed(method, url)
+  // Everything from here to the real call runs on the app's own `fetch` stack,
+  // so a bug in ours surfaces as the app's request failing. Falling through to
+  // the real implementation costs a devtool feature; throwing costs a feature
+  // of the app being debugged.
+  let entry: ReturnType<HttpRuntime['observe']>
+  let seed: ReturnType<HttpRuntime['matchSeed']>
+  try {
+    if (!runtime.shouldWatch(method, url)) return impl.call(thisArg, input, init)
+    entry = runtime.observe(method, url)
+    seed = runtime.matchSeed(method, url)
+  } catch {
+    return impl.call(thisArg, input, init)
+  }
 
   if (seed) {
     const status = seedStatus(seed)
-    runtime.settle(entry, { status, body: seed.data })
-    return Promise.resolve(buildResponse(ResponseCtor, seed.data, status, url))
+    try {
+      const response = buildResponse(ResponseCtor, seed.data, status, url)
+      settleQuietly(runtime, entry, { status, body: seed.data })
+      return Promise.resolve(response)
+    } catch {
+      // The seed could not be turned into a Response. Serving the real request
+      // is wrong, but it is the app's own behaviour — a throw here is not.
+      return impl.call(thisArg, input, init)
+    }
   }
 
   entry.inFlight += 1
-  runtime.changed()
+  try {
+    runtime.changed()
+  } catch {
+    // Only the panel misses an update.
+  }
 
   // Held across the call so the XHR layer can tell that a request arriving
   // underneath a polyfilled fetch has already been counted here.
@@ -149,7 +171,7 @@ function intercept(
     pending = impl.call(thisArg, input, init)
   } catch (error) {
     runtime.exitPassthrough()
-    runtime.settle(entry, { error: errorMessage(error) })
+    settleQuietly(runtime, entry, { error: errorMessage(error) })
     throw error
   }
   runtime.exitPassthrough()
@@ -162,15 +184,15 @@ function intercept(
         // immediately; capturing must never add latency to a real request,
         // and consuming the original stream would break the caller outright.
         void captureBody(response, runtime.maxCaptureBytes).then((body) => {
-          runtime.settle(entry, { status, body })
+          settleQuietly(runtime, entry, { status, body })
         })
       } else {
-        runtime.settle(entry, { status })
+        settleQuietly(runtime, entry, { status })
       }
       return response
     },
     (error: unknown) => {
-      runtime.settle(entry, { error: errorMessage(error) })
+      settleQuietly(runtime, entry, { error: errorMessage(error) })
       throw error
     },
   )
