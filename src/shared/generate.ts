@@ -88,6 +88,14 @@ function build(
   depth: number,
   seen: Map<string, number>,
 ): unknown {
+  // A node is normally an object, but the document comes off disk and a
+  // hand-edited or truncated one puts a `null` where a subschema should be.
+  // Warning and moving on keeps the surrounding object generating.
+  if (!node || typeof node !== 'object') {
+    context.warnings.push({ path, reason: 'schema node is not an object' })
+    return null
+  }
+
   if (node.$ref) {
     const resolved = resolveRef(node.$ref, context.document)
     if (!resolved) {

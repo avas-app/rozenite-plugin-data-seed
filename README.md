@@ -333,6 +333,30 @@ It reads `data-seed.config.json`:
 }
 ```
 
+Two things decide whether a target works:
+
+- **`source` has to reach every target type.** One module is imported for all of
+  them, so a type that is not exported from it resolves to `any`. In a monorepo
+  that usually means a package specifier (`"source": "@app/state/queries"`) or a
+  small file that re-exports from wherever the types actually live.
+- **A route pattern is the path on the wire**, including whatever base path your
+  client prepends. If requests go to `https://api.example.com/v2/api/wallet`,
+  then `GET /wallet` never matches and `GET /v2/api/wallet` does. `**` crosses
+  segments, so `GET **/wallet` works when the base varies by environment.
+
+A target that cannot be resolved is named and skipped — the rest are still
+written, and the exit code is non-zero so CI notices:
+
+```
+  ✗ ["emergency-contacts"]  EmergencyContact[]
+      its elements carry no type information
+      is `EmergencyContact` exported from ./api.ts? A type that is not
+      exported resolves to `any`.
+```
+
+That check exists because such a schema is otherwise indistinguishable from a
+working one: it extracts, commits, and then generates `null` for every field.
+
 Then pass the result to the hook, alongside your fixtures:
 
 ```ts

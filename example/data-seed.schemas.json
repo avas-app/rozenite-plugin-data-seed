@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generatedAt": "2026-08-20T05:44:24.718Z",
+  "generatedAt": "2026-08-20T06:49:01.965Z",
   "entries": [
     {
       "pattern": [
@@ -9,9 +9,9 @@
       "type": "ApiResponse<Todo[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1503-1649-api.ts-0-7984%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1436-1582-api.ts-0-7751%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-1503-1649-api.ts-0-7984[]>": {
+          "ApiResponse<def-alias-api.ts-1436-1582-api.ts-0-7751[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -298,9 +298,9 @@
       "type": "ApiResponse<Notification[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-3791-4122-api.ts-0-79841999362925%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-3724-4055-api.ts-0-77511999362925%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-api.ts-3791-4122-api.ts-0-79841999362925[]>": {
+          "ApiResponse<def-alias-api.ts-3724-4055-api.ts-0-77511999362925[]>": {
             "type": "object",
             "properties": {
               "data": {

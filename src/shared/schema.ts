@@ -74,8 +74,18 @@ export type SchemasFile = {
   version: number
   generatedAt: string
   entries: SchemaEntry[]
+  /** Entries that could not be read, described. Never a reason to drop the rest. */
+  problems: string[]
 }
 
+/**
+ * Reads the schemas file, keeping every entry it can.
+ *
+ * Only a file that is unusable as a whole throws — wrong shape, or written by a
+ * newer plugin. A single malformed entry is skipped and described, because the
+ * alternative is that one bad pattern in a fifty-target file silently costs you
+ * generation for all fifty.
+ */
 export function parseSchemasFile(raw: unknown): SchemasFile {
   if (!raw || typeof raw !== 'object') {
     throw new Error('schemas file must be a JSON object')
@@ -93,20 +103,40 @@ export function parseSchemasFile(raw: unknown): SchemasFile {
       `schemas file was written by a newer plugin (v${candidate.version}); upgrade to read it`,
     )
   }
+
+  const entries: SchemaEntry[] = []
+  const problems: string[] = []
+
+  ;(candidate.entries as unknown[]).forEach((raw, index) => {
+    const entry = raw as Partial<SchemaEntryJson> | null
+    if (!entry || typeof entry !== 'object') {
+      problems.push(`entry ${index}: must be an object`)
+      return
+    }
+    if (!entry.schema || typeof entry.schema !== 'object') {
+      // Generation reads this document directly, so a missing one is not a
+      // schema that produces nothing — it is a crash at seed time.
+      problems.push(`entry ${index}: has no schema object`)
+      return
+    }
+    try {
+      entries.push({
+        ...(entry as SchemaEntryJson),
+        type: typeof entry.type === 'string' ? entry.type : 'unknown',
+        pattern: parseTargetPattern(entry.pattern as TargetPatternJson),
+      })
+    } catch (error) {
+      problems.push(
+        `entry ${index}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  })
+
   return {
     version: candidate.version ?? SCHEMAS_VERSION,
     generatedAt: candidate.generatedAt ?? '',
-    entries: (candidate.entries as SchemaEntryJson[]).map((entry, index) => {
-      try {
-        return { ...entry, pattern: parseTargetPattern(entry.pattern) }
-      } catch (error) {
-        throw new Error(
-          `schemas file entry ${index}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        )
-      }
-    }),
+    entries,
+    problems,
   }
 }
 

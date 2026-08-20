@@ -36,10 +36,37 @@ describe('parseSchemasFile', () => {
     expect(entries[0].pattern).toEqual({ kind: 'key', key: ['todos'] })
   })
 
-  test('names the offending entry rather than failing anonymously', () => {
-    expect(() =>
-      parseSchemasFile({ entries: [{ pattern: ['ok'] }, { pattern: 7 }] }),
-    ).toThrow(/entry 1/)
+  test('keeps the good entries and names the bad one', () => {
+    const { entries, problems } = parseSchemasFile({
+      entries: [
+        { pattern: ['ok'], type: 'Ok', schema: { type: 'string' } },
+        { pattern: 7, type: 'Bad', schema: {} },
+        { pattern: ['no-schema'], type: 'Bad' },
+        null,
+      ],
+    })
+    // One bad pattern in a file must not cost you every other schema in it.
+    expect(entries).toHaveLength(1)
+    expect(entries[0].pattern).toEqual({ kind: 'key', key: ['ok'] })
+    expect(problems).toHaveLength(3)
+    expect(problems[0]).toMatch(/entry 1/)
+    expect(problems[1]).toMatch(/entry 2.*no schema/)
+    expect(problems[2]).toMatch(/entry 3.*object/)
+  })
+
+  test('an entry with no schema is dropped, because generation reads it directly', () => {
+    const { entries, problems } = parseSchemasFile({
+      entries: [{ pattern: ['x'], type: 'X', schema: 'not an object' }],
+    })
+    expect(entries).toEqual([])
+    expect(problems[0]).toMatch(/no schema object/)
+  })
+
+  test('a well-formed file reports no problems', () => {
+    const { problems } = parseSchemasFile({
+      entries: [{ pattern: ['todos'], type: 'T', schema: { type: 'object' } }],
+    })
+    expect(problems).toEqual([])
   })
 
   test('rejects anything without entries', () => {

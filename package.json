@@ -43,6 +43,7 @@
   "files": [
     "dist",
     "bin",
+    "!bin/__tests__",
     "sdk.ts",
     "docs",
     "skills",
@@ -65,7 +66,7 @@
   "scripts": {
     "build": "rozenite build",
     "dev": "rozenite dev",
-    "test": "bun test src/",
+    "test": "bun test src/ bin/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "tsc -p tsconfig.json --noEmit && rozenite build",
     "presets": "bun run scripts/build-dev-presets.ts",

@@ -135,7 +135,14 @@ export function useSeeder(options: SeederOptions = {}): void {
     if (fixtures) session.setFixtures(loadFixtures(fixtures))
     if (schemas) {
       try {
-        session.setSchemas(parseSchemasFile(schemas).entries)
+        const parsed = parseSchemasFile(schemas)
+        session.setSchemas(parsed.entries)
+        // Individually broken entries are skipped rather than discarding the
+        // file, so say which ones — otherwise "no schema covers this target" is
+        // the only symptom, and it points at the config instead of the file.
+        for (const problem of parsed.problems) {
+          console.warn(`[data-seed] skipped a schema entry — ${problem}`)
+        }
       } catch (error) {
         // A stale or hand-broken schemas file must not take the panel down with
         // it — everything except generation still works.
