@@ -40,9 +40,9 @@ Route globs: `*` matches within one path segment, `**` crosses segments. So
 omitted method matches any method.
 
 Routes cover `fetch` and `XMLHttpRequest` (so axios) automatically. `expo/fetch`
-is native and reaches neither, so it only works if the app wrapped it with
-`seedableFetch` — if a route seed applies but an `expo/fetch` call still hits the
-network, that is the missing piece. See **Setup**.
+is native and reaches neither, so it needs one extra import in the app. If a
+route seed applies but an `expo/fetch` call still hits the network, that is the
+missing piece — see **Setup**.
 
 ## Calling the tools
 
@@ -143,8 +143,13 @@ useSeeder({
 })
 ```
 
-For `expo/fetch`, the app also has to wrap it once at its import site, because
-its module export cannot be patched:
+For `expo/fetch`, the app also needs this once in its entry file:
+
+```ts
+import '@avasapp/rozenite-plugin-data-seed/expo'
+```
+
+If that import is refused by the bundler, the fallback wraps it by hand instead:
 
 ```ts
 import { fetch as expoFetch } from 'expo/fetch'
@@ -161,4 +166,5 @@ installed adapter. Schemas come from `npx data-seed extract`, which reads
 `data-seed.config.json`.
 
 Field-level values are controlled by `@fake` JSDoc tags in the app's own types
-(`/** @fake person.fullName */`). `npx data-seed tokens` lists every one.
+(`/** @fake person.fullName */`). `npx data-seed tokens` lists every one, as does
+`docs/tokens.md` in the package.

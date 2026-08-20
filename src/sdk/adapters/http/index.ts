@@ -1,6 +1,6 @@
 import { ADAPTER_HTTP } from '../../../shared/target'
 import type { SeedAdapter, Session } from '../../session'
-import { canBuildResponses, patchGlobalFetch } from './fetch'
+import { canBuildResponses, patchGlobalFetch, publishRuntime } from './fetch'
 import { HttpRuntime, clearActiveRuntime, routeIdentity, setActiveRuntime } from './runtime'
 import { patchXhr } from './xhr'
 
@@ -49,6 +49,9 @@ export function installHttpAdapter(
   const intercept = canBuildResponses()
 
   if (intercept) {
+    // Published first: `seedableFetch` wrappers and the `./expo` entry consult
+    // this, and they exist independently of whether the global was patchable.
+    disposers.push(publishRuntime(runtime))
     disposers.push(patchGlobalFetch())
     if (options.xhr !== false) disposers.push(patchXhr())
   }

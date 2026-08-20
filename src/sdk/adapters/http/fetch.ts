@@ -2,8 +2,9 @@ import { urlPath } from '../../../shared/target'
 import type { TargetRef } from '../../../shared/target'
 import type { HttpRuntime } from './runtime'
 import {
-  activeRuntime,
+  currentFetchHook,
   errorMessage,
+  publishFetchHook,
   seedBodyText,
   seedStatus,
   statusText,
@@ -61,12 +62,36 @@ export function wrapFetch(impl: FetchLike): FetchLike {
     input: unknown,
     init?: unknown,
   ): Promise<unknown> {
-    const runtime = activeRuntime()
-    const ResponseCtor = globals().Response
-    if (!runtime || typeof ResponseCtor !== 'function') {
-      return impl.call(this, input, init)
-    }
-    return intercept(runtime, ResponseCtor, impl, this, input, init)
+    // Read through the same global hook the `./expo` entry uses, so there is
+    // one publish point and one lookup rather than two mechanisms that can
+    // disagree about whether seeding is active.
+    const hook = currentFetchHook()
+    if (!hook) return impl.call(this, input, init)
+    return hook(impl, this, input, init)
+  }
+}
+
+/**
+ * Makes this runtime the one every wrapped fetch consults, and returns the undo.
+ *
+ * Separate from patching the global `fetch` because the two are independent:
+ * `seedableFetch` wrappers and the `./expo` entry need the hook even when the
+ * global itself was never patchable.
+ */
+export function publishRuntime(runtime: HttpRuntime): () => void {
+  const ResponseCtor = globals().Response
+  if (typeof ResponseCtor !== 'function') return () => {}
+
+  const hook = (
+    impl: FetchLike,
+    thisArg: unknown,
+    input: unknown,
+    init?: unknown,
+  ): Promise<unknown> => intercept(runtime, ResponseCtor, impl, thisArg, input, init)
+
+  publishFetchHook(hook)
+  return () => {
+    if (currentFetchHook() === hook) publishFetchHook(null)
   }
 }
 

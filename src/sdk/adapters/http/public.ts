@@ -4,8 +4,17 @@ import { wrapFetch } from './fetch'
  * Makes one `fetch` implementation seedable.
  *
  * Only needed for a fetch that is **not** `globalThis.fetch`, because that one
- * is patched for you by `useSeeder({ http: true })`. The case this exists for is
- * `expo/fetch`:
+ * is patched for you by `useSeeder({ http: true })`.
+ *
+ * For `expo/fetch`, prefer the dedicated entry — it needs no per-call-site
+ * change and works wherever it lands in import order:
+ *
+ * ```ts
+ * import '@avasapp/rozenite-plugin-data-seed/expo'
+ * ```
+ *
+ * This is the fallback for when that cannot be used: a future Expo layout it
+ * does not know about, or any other fetch you hold yourself.
  *
  * ```ts
  * import { fetch as expoFetch } from 'expo/fetch'
@@ -14,18 +23,9 @@ import { wrapFetch } from './fetch'
  * export const fetch = seedableFetch(expoFetch)
  * ```
  *
- * `expo/fetch` is a native implementation — it goes through neither
- * `globalThis.fetch` nor `XMLHttpRequest`, so neither patch reaches it. Nor can
- * its module export be replaced: Metro compiles the re-export to a getter with
- * `configurable: false`, so assignment silently does nothing and
- * `Object.defineProperty` throws. Patching would mean reaching into
- * `expo/src/...`, which would make Expo a bundle-time dependency of this
- * package and break every bare React Native app that installed it.
- *
- * So this is the honest version: one line, at the import site, where it is
- * visible. It is inert until `useSeeder` mounts and inert again after it
- * unmounts, and it resolves the session per call — so it is safe at module
- * scope, which is where you want it.
+ * It resolves the session per call rather than capturing it, so it is inert
+ * until `useSeeder` mounts, inert again after it unmounts, and safe to call at
+ * module scope — which is where you want it.
  *
  * The returned function keeps the signature of what you passed in.
  */

@@ -124,7 +124,7 @@ everything built on XHR — **axios** being the one that matters. React Native's
 `fetch` is itself a polyfill over XHR, so a single request would otherwise be
 recorded twice; it is counted once, at the fetch layer.
 
-`expo/fetch` needs one extra line — see [below](#expofetch-needs-one-line).
+`expo/fetch` needs one extra import — see [below](#expofetch-needs-one-import).
 
 Routes are matched by pattern, so one seed covers a family of URLs:
 
@@ -154,17 +154,37 @@ To seed something that has never been requested — an endpoint behind an error
 path you cannot reach — type it into the box at the top of the HTTP section. That
 is the case the observed list cannot cover on its own.
 
-### `expo/fetch` needs one line
+### `expo/fetch` needs one import
 
-`expo/fetch` is a **native** implementation — it goes through neither
-`globalThis.fetch` nor `XMLHttpRequest`, so neither patch reaches it. Nor can its
-module export be replaced: Metro compiles the re-export to a getter with
-`configurable: false`, so assignment silently does nothing and
-`Object.defineProperty` throws. Patching it would mean reaching into
-`expo/src/...`, which would make Expo a bundle-time dependency of this package
-and break every bare React Native app that installed it.
+`expo/fetch` is **native** — it goes through neither `globalThis.fetch` nor
+`XMLHttpRequest`, so neither patch reaches it. One line, once, anywhere in your
+entry file:
 
-So it is wrapped explicitly, once, at your import site:
+```ts
+import '@avasapp/rozenite-plugin-data-seed/expo'
+```
+
+That is the whole integration. Call sites keep calling `expo/fetch` normally,
+and order does not matter — the patch is read per request, not captured at
+import.
+
+<details>
+<summary>Why it is a separate import rather than automatic</summary>
+
+Expo's module export cannot be replaced: Metro compiles `export * from './fetch'`
+to a getter with `configurable: false`, so both assignment and
+`Object.defineProperty` throw. That getter does forward to the *inner* module on
+every read, and the inner module's export is an ordinary writable property — so
+patching there is visible through the public path.
+
+Reaching it means a literal `require` of a path inside Expo, which Metro resolves
+at **bundle** time. Doing that from the main entry would make Expo a build-time
+dependency of this package and break every bare React Native app that installed
+it. A separate entry point is pulled into a bundle only by apps that ask for it.
+
+If a future Expo release moves that file, the build fails with an unresolved
+module naming it — loud, not silent. Fall back to wrapping it yourself, which
+touches no Expo internals:
 
 ```ts
 import { fetch as expoFetch } from 'expo/fetch'
@@ -173,10 +193,9 @@ import { seedableFetch } from '@avasapp/rozenite-plugin-data-seed'
 export const fetch = seedableFetch(expoFetch)
 ```
 
-Everything downstream then behaves exactly like a patched global — same route
-patterns, same status control, same observed list. The wrapper resolves the
-session per call, so it is safe at module scope, and it is inert outside
-`__DEV__` and after the hook unmounts.
+`seedableFetch` also works for any other fetch you hold yourself.
+
+</details>
 
 ### What it still does not intercept
 
@@ -411,48 +430,22 @@ existing annotations keep working and there is nothing to migrate.
 
 ### Every token
 
-There is no larger set behind this — the table is the whole vocabulary.
-Arguments are JSON: `number.int({min: 1, max: 10})`.
+The vocabulary is a fixed list of 23 — there is no larger set behind it.
+**[docs/tokens.md](docs/tokens.md)** has every one with its arguments and an
+example of what it produces, plus what unannotated fields fall back to.
 
-Run **`npx data-seed tokens`** for the same list in your terminal, or click the
-tag button next to **Generate** in the panel — which is usually the moment you
-want it, since you are looking at a field the shape preview shows as plain
-`string` and deciding what to make it.
+Two other ways to see the same list, both closer to where you need it:
 
-<!-- tokens:start -->
+- **`npx data-seed tokens`** — in your terminal, next to the source you are
+  annotating.
+- **The tag button beside Generate in the panel** — usually the actual moment
+  you want it, since you are looking at a field the shape preview shows as plain
+  `string` and deciding what to make it.
 
-| Token | Produces | Arguments | Example |
-| --- | --- | --- | --- |
-| `person.firstName` | A first name |  | `Ken` |
-| `person.lastName` | A surname |  | `Thompson` |
-| `person.fullName` | A first name and surname |  | `Grace Johnson` |
-| `internet.email` | An address at example.com |  | `linus.turing@example.com` |
-| `internet.userName` | A lowercase handle with digits |  | `ken86` |
-| `internet.url` | An https URL |  | `https://example.com/ipsum` |
-| `image.avatar` | An avatar image URL |  | `https://example.com/avatars/81.png` |
-| `string.uuid` | A v4-shaped UUID |  | `6da50278-a631-4ed2-ccd3-47d20409e072` |
-| `string.alpha` | Letters only | `length = 8` | `elit` |
-| `lorem.words` | Space-separated words | `count = 3` | `amet dolor lorem` |
-| `lorem.sentence` | One capitalised sentence | `count = 8` | `Sit amet dolor consectetur adipiscing ipsum amet ad…` |
-| `lorem.paragraph` | Three sentences |  | `Dolor elit sit lorem amet elit dolor ipsum lorem lo…` |
-| `date.recent` | ISO timestamp, within the last week |  | `2025-12-31T06:51:51.901Z` |
-| `date.past` | ISO timestamp, within the last year |  | `2025-11-04T18:19:29.576Z` |
-| `date.soon` | ISO timestamp, within the next week |  | `2026-01-03T06:07:16.830Z` |
-| `date.future` | ISO timestamp, within the next year |  | `2026-03-19T08:07:35.241Z` |
-| `number.int` | A whole number | `min = 1, max = 1000` | `959` |
-| `number.float` | A number with two decimals | `min = 0, max = 1` | `0.29` |
-| `datatype.boolean` | true or false |  | `true` |
-| `phone.number` | A +1 555 number |  | `+1 555 7087` |
-| `location.city` | A city name |  | `Osaka` |
-| `location.country` | A country name |  | `Portugal` |
-| `location.streetAddress` | A street address |  | `597 Lovelace Street` |
-
-<!-- tokens:end -->
-
-Anything not in that list warns rather than silently substituting something, and
+Anything not on that list warns rather than silently substituting something, and
 the warning names the closest match — misremembering `name.fullName` for
-`person.fullName` is the common case, and it says so instead of sending you back
-here.
+`person.fullName` is the common case, and it says so instead of sending you to
+go and look.
 
 ### What it tells you it could not do
 
@@ -521,9 +514,10 @@ await session.callTool(seedTools.applyFixture, {
 
 - **SWR is not supported yet.** The adapter seam exists for it; SWR's `use`
   middleware is the equivalent hook point.
-- **`expo/fetch` is opt-in**, for the reasons in
-  [`expo/fetch` needs one line](#expofetch-needs-one-line). It is the only
-  transport that cannot be reached without touching app code.
+- **`expo/fetch` needs one import**, for the reasons in
+  [`expo/fetch` needs one import](#expofetch-needs-one-import). It is the only
+  transport that cannot be reached without a line of app code, and the only one
+  that reads an internal path of another package.
 - **Authoring fixtures is not scriptable.** Applying them is — see
   [Driving it without DevTools](#driving-it-without-devtools) — but *creating* a
   file goes through the browser, so CI cannot write new ones. The write path sits
@@ -572,11 +566,11 @@ TypeScript-to-JSON-Schema extraction.
 
 ```bash
 bun install
-bun test        # 186 tests
+bun test        # 193 tests
 bun typecheck
 bun run build
 bun run presets # regenerate rozenite.config.ts dev presets
-bun run docs    # regenerate the token table in this README
+bun run docs    # regenerate docs/tokens.md
 ```
 
 `bun dev` starts Rozenite's browser dev host on

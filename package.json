@@ -34,14 +34,20 @@
       "types": "./dist/sdk/index.d.ts",
       "import": "./dist/sdk/index.js",
       "require": "./dist/sdk/index.cjs"
+    },
+    "./expo": {
+      "types": "./expo.ts",
+      "default": "./expo.ts"
     }
   },
   "files": [
     "dist",
     "bin",
     "sdk.ts",
+    "docs",
     "skills",
-    "src/shared"
+    "src/shared",
+    "expo.ts"
   ],
   "keywords": [
     "tanstack-query",

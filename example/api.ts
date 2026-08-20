@@ -23,7 +23,6 @@
 
 import axios from 'axios'
 import { fetch as expoFetch } from 'expo/fetch'
-import { seedableFetch } from '@avasapp/rozenite-plugin-data-seed'
 
 /** Generic envelope, as most real APIs have. */
 export type ApiResponse<T> = {
@@ -239,18 +238,14 @@ export async function fetchOrders(): Promise<Order[]> {
 }
 
 /**
- * `expo/fetch`, which is native — it goes through neither `globalThis.fetch`
- * nor `XMLHttpRequest`, and its module export cannot be replaced (Metro
- * compiles the re-export to a getter with `configurable: false`). So it is
- * wrapped explicitly, once, here at the import site.
+ * `expo/fetch`, called with no wrapping at all.
  *
- * The wrapper is inert outside `__DEV__`, so this line costs a function call in
- * production and nothing else.
+ * It is native — it goes through neither `globalThis.fetch` nor
+ * `XMLHttpRequest` — so seeding it takes the dedicated entry point, imported
+ * once in `index.ts`. Nothing here has to know about it, which is the point.
  */
-const netFetch = seedableFetch(expoFetch)
-
 export async function fetchInvoice(): Promise<Invoice> {
-  const response = await netFetch(INVOICE_URL)
+  const response = await expoFetch(INVOICE_URL)
   if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
   return (await response.json()) as Invoice
 }

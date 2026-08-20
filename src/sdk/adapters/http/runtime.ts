@@ -301,7 +301,7 @@ export function seedBodyText(data: unknown): string {
 // ------------------------------------------------------- ambient registry
 
 /**
- * The runtime a `seedableFetch(...)` wrapper talks to.
+ * The runtime a wrapped `fetch` talks to.
  *
  * Module-level because those wrappers are created at import time, long before
  * `useSeeder` mounts — the same delegating indirection the query adapter uses
@@ -320,4 +320,35 @@ export function clearActiveRuntime(runtime: HttpRuntime): void {
 
 export function activeRuntime(): HttpRuntime | null {
   return active
+}
+
+/**
+ * The same rendezvous again, but on `globalThis`.
+ *
+ * The `./expo` entry deliberately imports nothing from this package: it has to
+ * `require` an internal Expo path, so it must stay out of every bundle that does
+ * not opt in. That makes a module-level variable useless to it — it could be
+ * resolved as a second copy of this module, and then the copy the hook writes to
+ * is not the copy the wrapper reads from, which fails silently and looks exactly
+ * like "the seed did not apply".
+ *
+ * A global has no such ambiguity, so it is what the two ends agree on.
+ */
+export const FETCH_HOOK_KEY = '__rozeniteDataSeedFetchHook__'
+
+export type FetchHook = (
+  impl: (input: unknown, init?: unknown) => Promise<unknown>,
+  thisArg: unknown,
+  input: unknown,
+  init?: unknown,
+) => Promise<unknown>
+
+type HookHost = Record<string, FetchHook | null | undefined>
+
+export function publishFetchHook(hook: FetchHook | null): void {
+  ;(globalThis as unknown as HookHost)[FETCH_HOOK_KEY] = hook
+}
+
+export function currentFetchHook(): FetchHook | null {
+  return (globalThis as unknown as HookHost)[FETCH_HOOK_KEY] ?? null
 }
