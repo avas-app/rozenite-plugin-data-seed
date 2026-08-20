@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "generatedAt": "2026-08-19T12:19:06.129Z",
+  "version": 2,
+  "generatedAt": "2026-08-20T04:42:35.344Z",
   "entries": [
     {
       "pattern": [
@@ -9,9 +9,9 @@
       "type": "ApiResponse<Todo[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-example_api.ts-1361-1509-example_api.ts-0-4636%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-1361-1509-api.ts-0-5801%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-example_api.ts-1361-1509-example_api.ts-0-4636[]>": {
+          "ApiResponse<def-alias-api.ts-1361-1509-api.ts-0-5801[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -297,9 +297,9 @@
       "type": "ApiResponse<Notification[]>",
       "schema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": "#/definitions/ApiResponse%3Cdef-alias-example_api.ts-2202-2533-example_api.ts-0-46361999362925%5B%5D%3E",
+        "$ref": "#/definitions/ApiResponse%3Cdef-alias-api.ts-2709-3040-api.ts-0-58011999362925%5B%5D%3E",
         "definitions": {
-          "ApiResponse<def-alias-example_api.ts-2202-2533-example_api.ts-0-46361999362925[]>": {
+          "ApiResponse<def-alias-api.ts-2709-3040-api.ts-0-58011999362925[]>": {
             "type": "object",
             "properties": {
               "data": {
@@ -419,6 +419,45 @@
               }
             ],
             "description": "Discriminated union: the generator must be told which arm to produce."
+          }
+        }
+      }
+    },
+    {
+      "pattern": "GET /v1/profile",
+      "type": "Profile",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/Profile",
+        "definitions": {
+          "Profile": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "faker": "person.fullName"
+              },
+              "email": {
+                "type": "string",
+                "faker": "internet.email"
+              },
+              "followers": {
+                "type": "number",
+                "faker": "number.int({min: 0, max: 50000})"
+              },
+              "joinedAt": {
+                "type": "string",
+                "faker": "date.past"
+              }
+            },
+            "required": [
+              "name",
+              "email",
+              "followers",
+              "joinedAt"
+            ],
+            "additionalProperties": false,
+            "description": "The one shape that arrives over a real `fetch`, for the HTTP adapter.\n\nEverything else here is a fake resolved in-process; this deliberately is not, because an adapter that patches `fetch` has nothing to intercept unless something actually calls it."
           }
         }
       }

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Query Seed Example",
-    "slug": "rozenite-plugin-query-seed-example",
+    "name": "Data Seed Example",
+    "slug": "rozenite-plugin-data-seed-example",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

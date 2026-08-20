@@ -44,7 +44,7 @@ export function isFileSystemAccessSupported(): boolean {
 }
 
 /** Chrome keys its remembered picker location on this. */
-const PICKER_ID = 'rozenite-query-seed-fixtures'
+const PICKER_ID = 'rozenite-data-seed-fixtures'
 
 /**
  * Prompts for a directory. Must be called from a user gesture — the picker is

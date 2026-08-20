@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -15,10 +15,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useQuerySeeder } from '@avasapp/rozenite-plugin-query-seed'
+import { useSeeder } from '@avasapp/rozenite-plugin-data-seed'
 
+import type { Profile } from './api'
 import {
   fetchNotifications,
+  fetchProfile,
   fetchSettings,
   fetchThread,
   fetchTodos,
@@ -28,16 +30,21 @@ import {
 } from './api'
 
 /**
- * Example app for `@avasapp/rozenite-plugin-query-seed`.
+ * Example app for `@avasapp/rozenite-plugin-data-seed`.
  *
- * The API here is a fake — realistic shapes, realistic latency, no network and
- * no account. Everything else is real: a real `QueryClient`, real `useQuery`
- * calls, the actual `useQuerySeeder` hook and the actual Rozenite bridge, so
- * what the panel does here is what it does in a production app.
+ * Most of the API here is a fake — realistic shapes, realistic latency, no
+ * network and no account. Everything else is real: a real `QueryClient`, real
+ * `useQuery` calls, the actual `useSeeder` hook and the actual Rozenite bridge,
+ * so what the panel does here is what it does in a production app.
  *
- * Run it, press `j` to open React Native DevTools, and pick the **Query Seed**
- * tab. Seed `["todos"]`, then hit "Break the API" — the screen keeps rendering
- * your data while every real request behind it fails.
+ * Run it, press `j` to open React Native DevTools, and pick the **Data Seed**
+ * tab. Two things worth trying:
+ *
+ *   - Seed `["todos"]`, then hit "Break the API" — the screen keeps rendering
+ *     your data while every real request behind it fails.
+ *   - The Profile card calls a real `fetch` at a host that cannot resolve, so
+ *     it starts broken. Seed `GET /v1/profile` and it renders, with no server
+ *     at either end. Set the status to 500 to put it back.
  */
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,11 +69,16 @@ function Root() {
   // The only lines an app needs. `require.context` is what makes the fixtures in
   // ./seeds show up for anyone who clones the repo — they ride in the bundle,
   // so there is nothing to configure and no folder to point at.
-  useQuerySeeder(queryClient, {
+  useSeeder({
+    queryClient,
+    // Patches `fetch`, so responses can be seeded below the cache — which also
+    // exercises the app's real parsing on the way up, where a seeded cache
+    // entry would bypass it.
+    http: true,
     fixtures: require.context('./seeds', false, /\.json$/),
-    // Written by `npx query-seed extract` from the types in ./api.ts, so the
+    // Written by `npx data-seed extract` from the types in ./api.ts, so the
     // panel can generate data instead of making you type it.
-    schemas: require('./query-seed.schemas.json'),
+    schemas: require('./data-seed.schemas.json'),
   })
 
   return (
@@ -74,9 +86,9 @@ function Root() {
       <SafeAreaView style={[styles.root, theme.root]} edges={['top', 'bottom']}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={[styles.title, theme.title]}>Query Seed</Text>
+          <Text style={[styles.title, theme.title]}>Data Seed</Text>
           <Text style={[styles.subtitle, theme.subtitle]}>
-            Open React Native DevTools → Query Seed, then seed any of these.
+            Open React Native DevTools → Data Seed, then seed any of these.
           </Text>
 
           <Controls theme={theme} />
@@ -99,6 +111,10 @@ function Root() {
 
           <Panel label='["notifications"]' theme={theme}>
             <NotificationsCard theme={theme} />
+          </Panel>
+
+          <Panel label="GET /v1/profile" theme={theme}>
+            <ProfileCard theme={theme} />
           </Panel>
         </ScrollView>
       </SafeAreaView>
@@ -214,6 +230,60 @@ function NotificationsCard({ theme }: { theme: Theme }) {
   )
 }
 
+/**
+ * The only card with no React Query in it at all.
+ *
+ * Plain `fetch` in an effect, which is the case the HTTP adapter exists for —
+ * if this needed a query cache to be seedable, the adapter would be pointless.
+ */
+function ProfileCard({ theme }: { theme: Theme }) {
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    let cancelled = false
+    fetchProfile()
+      .then((next) => {
+        if (cancelled) return
+        setProfile(next)
+        setError(null)
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return
+        setProfile(null)
+        setError(cause instanceof Error ? cause.message : 'failed')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(load, [load])
+
+  return (
+    <>
+      {loading ? <Text style={[styles.dim, theme.dim]}>loading…</Text> : null}
+      {error && !loading ? <Text style={styles.error}>{error}</Text> : null}
+      {profile ? (
+        <>
+          <Text style={[styles.row, theme.row]}>{profile.name}</Text>
+          <Text style={[styles.dim, theme.dim]}>
+            {profile.email} · {profile.followers} followers
+          </Text>
+        </>
+      ) : null}
+      <View style={styles.cardControls}>
+        <Button label="Request again" onPress={load} theme={theme} />
+      </View>
+    </>
+  )
+}
+
 // ---- presentation ----
 
 function State({
@@ -300,6 +370,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700' },
   subtitle: { fontSize: 13, marginBottom: 4 },
   controls: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  cardControls: { flexDirection: 'row', gap: 8, marginTop: 8 },
   panel: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 4 },
   key: { fontFamily: 'Menlo', fontSize: 12, marginBottom: 4 },
   row: { fontSize: 14 },

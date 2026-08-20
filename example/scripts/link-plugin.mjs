@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
  * Symlinks the plugin into the example's `node_modules`.
  *
  * Rozenite discovers plugins by crawling `node_modules` for `dist/rozenite.json`,
- * so the package has to be present there or the Query Seed panel never appears
+ * so the package has to be present there or the Data Seed panel never appears
  * ("[Rozenite] No plugins found."). A declared `file:..` dependency does not
  * work: bun *copies* the directory, so the copy's `dist/` goes stale the moment
  * the plugin is rebuilt.
@@ -37,7 +37,7 @@ fs.symlinkSync(pluginRoot, target, 'dir')
 const manifest = path.join(pluginRoot, 'dist', 'rozenite.json')
 if (!fs.existsSync(manifest)) {
   console.warn(
-    '[example] linked, but the plugin is not built yet — run `bun run build` in the repo root, or the Query Seed panel will not appear.',
+    '[example] linked, but the plugin is not built yet — run `bun run build` in the repo root, or the Data Seed panel will not appear.',
   )
 } else {
   console.log(`[example] linked ${packageName} ->`, pluginRoot)

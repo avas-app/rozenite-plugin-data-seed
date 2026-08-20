@@ -42,7 +42,7 @@ const SINGLETONS = ['react', 'react-dom', 'react-native', '@tanstack/react-query
 const exampleOrigin = path.join(projectRoot, 'index.ts')
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === '@avasapp/rozenite-plugin-query-seed') {
+  if (moduleName === '@avasapp/rozenite-plugin-data-seed') {
     return { type: 'sourceFile', filePath: pluginEntry }
   }
 
@@ -67,5 +67,5 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 // the symlink created by scripts/link-plugin.mjs.
 module.exports = withRozenite(config, {
   enabled: true,
-  include: ['@avasapp/rozenite-plugin-query-seed'],
+  include: ['@avasapp/rozenite-plugin-data-seed'],
 })

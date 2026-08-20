@@ -1,5 +1,5 @@
 {
-  "name": "rozenite-plugin-query-seed-example",
+  "name": "rozenite-plugin-data-seed-example",
   "version": "0.0.0",
   "private": true,
   "main": "index.ts",

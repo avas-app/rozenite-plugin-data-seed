@@ -1,16 +1,16 @@
 {
-  "name": "@avasapp/rozenite-plugin-query-seed",
+  "name": "@avasapp/rozenite-plugin-data-seed",
   "version": "0.1.0",
-  "description": "Seed fake data into a TanStack Query cache from React Native DevTools \u2014 without touching your source.",
+  "description": "Seed fake data into a React Native app from DevTools \u2014 TanStack Query cache entries or HTTP responses, without touching your source.",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/avas-app/rozenite-plugin-query-seed#readme",
+  "homepage": "https://github.com/avas-app/rozenite-plugin-data-seed#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/avas-app/rozenite-plugin-query-seed.git"
+    "url": "git+https://github.com/avas-app/rozenite-plugin-data-seed.git"
   },
   "bugs": {
-    "url": "https://github.com/avas-app/rozenite-plugin-query-seed/issues"
+    "url": "https://github.com/avas-app/rozenite-plugin-data-seed/issues"
   },
   "publishConfig": {
     "access": "public"
@@ -46,6 +46,9 @@
   "keywords": [
     "tanstack-query",
     "react-query",
+    "fetch",
+    "http",
+    "msw",
     "react-native",
     "devtools",
     "rozenite",
@@ -58,7 +61,8 @@
     "dev": "rozenite dev",
     "test": "bun test src/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepublishOnly": "tsc -p tsconfig.json --noEmit && rozenite build"
+    "prepublishOnly": "tsc -p tsconfig.json --noEmit && rozenite build",
+    "presets": "bun run scripts/build-dev-presets.ts"
   },
   "dependencies": {
     "@rozenite/agent-bridge": "2.1.0",
@@ -91,7 +95,7 @@
     "ts-json-schema-generator": ">=2"
   },
   "bin": {
-    "query-seed": "./bin/query-seed.mjs"
+    "data-seed": "./bin/data-seed.mjs"
   },
   "peerDependenciesMeta": {
     "ts-json-schema-generator": {

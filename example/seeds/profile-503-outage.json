@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "profile \u2014 503 outage",
+  "target": {
+    "kind": "route",
+    "method": "GET",
+    "url": "/v1/profile"
+  },
+  "savedAt": "2026-08-20T10:00:00.000Z",
+  "meta": {
+    "status": 503
+  },
+  "data": {
+    "error": "upstream unavailable"
+  }
+}

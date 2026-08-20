@@ -215,8 +215,17 @@ export function installReactQueryAdapter(
   const hashKey = (queryKey: readonly unknown[]): string => {
     // Ask the library rather than reimplementing its hashing, so this stays
     // correct across versions and honours any custom `queryKeyHashFn`.
-    const resolved = original.call(client, { queryKey })
-    return resolved?.queryHash ?? JSON.stringify(queryKey)
+    //
+    // Guarded, because this is reached on the degraded path too: if
+    // `defaultQueryOptions` was missing we still list and address queries, and
+    // calling a non-function here would turn "seeds will not persist" into a
+    // crash in the tool that was meant to explain it.
+    if (typeof original !== 'function') return JSON.stringify(queryKey)
+    try {
+      return original.call(client, { queryKey })?.queryHash ?? JSON.stringify(queryKey)
+    } catch {
+      return JSON.stringify(queryKey)
+    }
   }
 
   const findQuery = (queryHash: string): QueryLike | undefined => {

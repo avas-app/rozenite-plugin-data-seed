@@ -60,7 +60,7 @@ describe('multiple adapters', () => {
     session.apply(keyTarget(['todos']), [{ id: 1 }])
     session.apply(routeTarget('GET', '/api/todos'), [{ id: 2 }])
 
-    expect(client.getQueryData(['todos'])).toEqual([{ id: 1 }])
+    expect(client.getQueryData<unknown[]>(['todos'])).toEqual([{ id: 1 }])
     const response = await fetch('https://x.com/api/todos')
     expect(await response.json()).toEqual([{ id: 2 }])
     expect(networkCalls).toHaveLength(0)
@@ -133,7 +133,7 @@ describe('multiple adapters', () => {
 describe('seed lifetime', () => {
   test('seeds survive an adapter unregistering, so Fast Refresh does not drop them', () => {
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (async () => new Response('{}')) as typeof fetch
+    globalThis.fetch = (async () => new Response('{}')) as unknown as typeof fetch
     const session = new Session()
 
     const dispose = installHttpAdapter(session)

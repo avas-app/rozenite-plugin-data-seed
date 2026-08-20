@@ -123,7 +123,7 @@ function urlPathWithQuery(url: string): string {
 // --------------------------------------------------------------- patterns
 
 /**
- * A pattern that selects targets, as written in `query-seed.config.json` and
+ * A pattern that selects targets, as written in `data-seed.config.json` and
  * stored in the schemas file.
  *
  * Route patterns are strings like `GET /api/users/*`; key patterns are arrays

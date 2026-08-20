@@ -67,6 +67,24 @@ export type Comment = {
   replies: Comment[]
 }
 
+/**
+ * The one shape that arrives over a real `fetch`, for the HTTP adapter.
+ *
+ * Everything else here is a fake resolved in-process; this deliberately is not,
+ * because an adapter that patches `fetch` has nothing to intercept unless
+ * something actually calls it.
+ */
+export type Profile = {
+  /** @faker person.fullName */
+  name: string
+  /** @faker internet.email */
+  email: string
+  /** @faker number.int({min: 0, max: 50000}) */
+  followers: number
+  /** @faker date.past */
+  joinedAt: string
+}
+
 /** Discriminated union: the generator must be told which arm to produce. */
 export type Notification =
   | { kind: 'mention'; id: number; from: string; commentId: number }
@@ -157,6 +175,22 @@ export async function fetchNotifications(): Promise<ApiResponse<Notification[]>>
     { kind: 'mention', id: 1, from: 'ada', commentId: 42 },
     { kind: 'system', id: 2, severity: 'info', message: 'Scheduled maintenance' },
   ])
+}
+
+/**
+ * Points at a host that cannot resolve, on purpose.
+ *
+ * `.invalid` is reserved by RFC 2606 and is guaranteed never to exist, so this
+ * request always fails — which makes it the clearest possible demonstration:
+ * the card is broken until you seed `GET /v1/profile` in the panel, and then it
+ * renders, with no server involved at either point.
+ */
+export const PROFILE_URL = 'https://api.example.invalid/v1/profile'
+
+export async function fetchProfile(): Promise<Profile> {
+  const response = await fetch(PROFILE_URL)
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
+  return (await response.json()) as Profile
 }
 
 function iso(daysAgo: number): string {

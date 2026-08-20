@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "name": "profile \u2014 power user",
+  "target": {
+    "kind": "route",
+    "method": "GET",
+    "url": "/v1/profile"
+  },
+  "savedAt": "2026-08-20T10:00:00.000Z",
+  "data": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com",
+    "followers": 48213,
+    "joinedAt": "2019-03-04T09:12:00.000Z"
+  }
+}

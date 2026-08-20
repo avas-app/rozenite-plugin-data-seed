@@ -52,7 +52,7 @@ export function generate(
   document: SchemaDocument,
   options: GenerateOptions = {},
 ): GenerateResult {
-  const random = makeRandom(options.seed ?? 'query-seed')
+  const random = makeRandom(options.seed ?? 'data-seed')
   const warnings: GenerateWarning[] = []
   const context = {
     document,

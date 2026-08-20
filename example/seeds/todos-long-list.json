@@ -1,9 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "name": "todos \u2014 200 items",
-  "queryKey": [
-    "todos"
-  ],
+  "target": {
+    "kind": "key",
+    "key": [
+      "todos"
+    ]
+  },
   "savedAt": "2026-08-19T10:00:00.000Z",
   "data": {
     "data": [

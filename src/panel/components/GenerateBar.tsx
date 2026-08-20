@@ -8,7 +8,7 @@ import type { GenerateWarning } from '../../shared/generate'
  * Controls for generating a value from the query's extracted schema.
  *
  * Only appears when a schema actually covers the selected key, so it stays
- * invisible in projects that have not run `query-seed extract` rather than
+ * invisible in projects that have not run `data-seed extract` rather than
  * advertising a feature that would do nothing.
  */
 export function GenerateBar({

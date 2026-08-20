@@ -7,7 +7,7 @@
  * is why it is a hand-rolled 40 lines rather than a dependency.
  */
 
-const DB_NAME = 'rozenite-query-seed'
+const DB_NAME = 'rozenite-data-seed'
 const STORE_NAME = 'handles'
 const DB_VERSION = 1
 

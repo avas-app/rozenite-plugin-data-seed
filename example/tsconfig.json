@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "paths": {
-      "@avasapp/rozenite-plugin-query-seed": ["../react-native.ts"]
+      "@avasapp/rozenite-plugin-data-seed": ["../react-native.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

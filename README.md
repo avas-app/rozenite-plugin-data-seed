@@ -1,13 +1,20 @@
-# @avasapp/rozenite-plugin-query-seed
+# @avasapp/rozenite-plugin-data-seed
 
-An interactive seeder for [TanStack Query](https://tanstack.com/query) in React
-Native DevTools, built on [Rozenite](https://www.rozenite.dev).
+An interactive data seeder for React Native DevTools, built on
+[Rozenite](https://www.rozenite.dev).
 
-Stop committing sample data to see a screen. Open DevTools, pick a query key,
-paste JSON, and it lands in the cache — and **stays** there through refetches,
-invalidation, and app focus, until you take it out.
+Stop committing sample data to see a screen. Open DevTools, pick a target, paste
+JSON, and it lands in your app — and **stays** there until you take it out.
 
-- **Seed any query** with arbitrary JSON, including keys never fetched.
+Two things can be seeded:
+
+- **TanStack Query cache entries**, which survive refetches, invalidation, and
+  app focus.
+- **HTTP responses**, by intercepting `fetch`. Works with no query cache at all,
+  and lets you force a 500.
+
+Plus:
+
 - **Committed fixtures** that ride in the app bundle, so teammates get them with
   no setup.
 - **Generate from your TypeScript types**, annotated in-source with JSDoc.
@@ -16,51 +23,73 @@ invalidation, and app focus, until you take it out.
 ## Install
 
 ```bash
-npm install --save-dev @avasapp/rozenite-plugin-query-seed
+npm install --save-dev @avasapp/rozenite-plugin-data-seed
 ```
 
-Requires **Rozenite 2.1 or later** and **TanStack Query v5**. Rozenite discovers
-the plugin automatically — no `metro.config` change is needed beyond having
-Rozenite itself set up.
+Requires **Rozenite 2.1 or later**. Rozenite discovers the plugin automatically —
+no `metro.config` change is needed beyond having Rozenite itself set up. TanStack
+Query v5 is optional; so is having a query library at all.
 
 ## Usage
 
-Call the hook once, anywhere in your component tree, with your `QueryClient`:
+Call the hook once, anywhere in your component tree:
 
 ```ts
-import { useQuerySeeder } from '@avasapp/rozenite-plugin-query-seed'
+import { useSeeder } from '@avasapp/rozenite-plugin-data-seed'
 
 function DevTools() {
-  useQuerySeeder(queryClient)
+  useSeeder({ queryClient, http: true })
   return null
 }
 ```
 
-It is a no-op outside `__DEV__`, and a no-op while the client is `null`, so it is
+Both sources are optional and independent. `{ queryClient }` alone seeds the
+cache; `{ http: true }` alone seeds responses and needs no query library.
+
+It is a no-op outside `__DEV__`, and a no-op while everything is absent, so it is
 safe to call before the client exists:
 
 ```ts
-useQuerySeeder(isReady ? queryClient : null)
+useSeeder({ queryClient: isReady ? queryClient : null })
 ```
 
 Then open React Native DevTools (`j` from the Metro terminal) and pick the
-**Query Seed** tab.
+**Data Seed** tab.
 
-That is enough to seed by hand. Two optional arguments unlock the rest —
+That is enough to seed by hand. Two more options unlock the rest —
 [`fixtures`](#fixtures) for committed states and [`schemas`](#generating-from-your-types)
 for generation:
 
 ```ts
-useQuerySeeder(queryClient, {
+useSeeder({
+  queryClient,
+  http: true,
   fixtures: require.context('./seeds', false, /\.json$/),
-  schemas: require('./query-seed.schemas.json'),
+  schemas: require('./data-seed.schemas.json'),
 })
 ```
 
-## Why seeds stick
+## Which layer to seed
 
-The obvious implementation is `queryClient.setQueryData(key, fake)`. It works
-for about four seconds — the next window focus, remount, or `invalidateQueries`
+Both adapters can cover the same screen, and they are not equivalent.
+
+**Seed the cache** when you want to bypass everything below it, or when the data
+never came from HTTP in the first place. Identity is your own query key, so it
+reads like your source and does not care what the URL is.
+
+**Seed the response** when you want the app's real code to run. A seeded response
+still goes through your parsing, your `select`, your transform, and your error
+handling on the way up — all of which a seeded cache entry skips. It is also the
+only option for `fetch` calls that no query library ever sees.
+
+If you are testing "does this screen render 200 items", seed the cache. If you
+are testing "does this screen survive what the server actually sends", seed the
+response.
+
+### Why cache seeds stick
+
+The obvious implementation is `queryClient.setQueryData(key, fake)`. It works for
+about four seconds — the next window focus, remount, or `invalidateQueries`
 refetches the key and silently replaces your data with whatever the server says.
 
 The next idea is `setQueryDefaults(key, { queryFn })`. That does not work at all:
@@ -80,15 +109,72 @@ Two consequences worth knowing:
 - **Withdrawing a seed refetches.** Removing it leaves stale fake data in the
   cache, so the plugin invalidates the key to force real data back in.
 
+## Seeding HTTP
+
+`http: true` patches `globalThis.fetch`. A seeded route is answered locally and
+never reaches the network; everything else passes through untouched and is
+recorded so you can see what your app actually calls.
+
+```ts
+useSeeder({ http: true })
+```
+
+Routes are matched by pattern, so one seed covers a family of URLs:
+
+| Pattern | Matches |
+| --- | --- |
+| `GET /api/todos` | that path on any host, with or without a query string |
+| `/api/todos` | that path, any method |
+| `GET /api/users/*` | `/api/users/7` — but **not** `/api/users/7/posts` |
+| `GET /api/**` | everything under `/api`, across segments |
+| `GET https://api.example.com/**` | only that host |
+
+`*` stays inside one path segment and `**` crosses them, for the same reason key
+patterns must match length exactly: without the distinction, a list schema
+quietly starts generating data for a detail route.
+
+**Set the status** next to the Apply button to answer with a 500, a 404, or a
+429. Forcing an error is most of the reason to seed a request rather than a cache
+entry, and it is the one state a real backend will not give you on demand.
+
+### The route list is observed, not enumerated
+
+A query cache can be listed before anything happens. HTTP cannot — a route only
+becomes known once a request has gone out. So the panel shows what it has *seen*,
+with a hit count, plus any seeded pattern nothing has matched yet.
+
+To seed something that has never been requested — an endpoint behind an error
+path you cannot reach — type it into the box at the top of the HTTP section. That
+is the case the observed list cannot cover on its own.
+
+### What it does not intercept
+
+- **`XMLHttpRequest` directly**, which means **axios is not covered yet**. In
+  React Native `fetch` is a polyfill over XHR, so patching `fetch` catches fetch
+  callers but not clients that skip it.
+- **`expo/fetch`**, unless your app makes it the global. It is a separate module
+  binding, so patching `globalThis.fetch` does not reach it.
+- **WebSockets and native networking.**
+
+Metro's own dev endpoints (`/symbolicate`, `/hot`, `/inspector/**`) are excluded
+by default so they do not flood the list. The exclusions are deliberately narrow
+paths rather than "anything on localhost", since plenty of people develop against
+a local API. Override with `include` / `exclude`:
+
+```ts
+useSeeder({ http: { include: ['https://api.example.com/**'] } })
+```
+
 ## What the panel shows
 
-The query list carries only a **preview** of each cache entry — the SDK never
-sends full values unprompted, so a 40k-row feed costs the same as a settings
-object. Opening a query fetches its real value into the editor on demand.
+The target list carries only a **preview** of each value — the SDK never sends
+full values unprompted, so a 40k-row feed costs the same as a settings object.
+Opening a target fetches its real value into the editor on demand.
 
-Rows are annotated with observer count: `inactive` means nothing on screen is
-subscribed, which is worth knowing before you seed it and wonder why nothing
-changed.
+Rows are grouped by adapter once you have more than one. Query rows are annotated
+with observer count: `inactive` means nothing on screen is subscribed, which is
+worth knowing before you seed it and wonder why nothing changed. HTTP rows show a
+hit count instead.
 
 ## Fixtures
 
@@ -97,7 +183,8 @@ folder and every JSON file in it becomes a named fixture you can restore in one
 click:
 
 ```ts
-useQuerySeeder(queryClient, {
+useSeeder({
+  queryClient,
   fixtures: require.context('./seeds', false, /\.json$/),
 })
 ```
@@ -119,19 +206,34 @@ Plain, diff-friendly JSON — commit them and the whole team gets them:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "name": "cart with 50 items",
-  "queryKey": ["cart", { "userId": 7 }],
+  "target": ["cart", { "userId": 7 }],
   "savedAt": "2026-08-19T10:00:00.000Z",
   "data": { "items": [] }
 }
 ```
 
-A fixture carries its own `queryKey`, so restoring one seeds the right query even
-if that screen has never been opened and the query is not in the cache yet.
-Hand-written fixtures work too — `queryKey` and `data` are the only required
-fields, and a malformed file is reported in the panel by name rather than
-silently skipped.
+A route fixture names its route instead, and may carry a status:
+
+```json
+{
+  "version": 2,
+  "name": "profile — 503 outage",
+  "target": { "kind": "route", "method": "GET", "url": "/v1/profile" },
+  "savedAt": "2026-08-20T10:00:00.000Z",
+  "meta": { "status": 503 },
+  "data": { "error": "upstream unavailable" }
+}
+```
+
+A fixture carries its own target, so restoring one seeds the right thing even if
+that screen has never been opened. Hand-written fixtures work too — `target` and
+`data` are the only required fields, and a malformed file is reported in the
+panel by name rather than silently skipped.
+
+Files written by v1 used `queryKey` instead of `target`. Those still read
+correctly, so an existing `seeds/` directory needs no migration.
 
 ### Saving new fixtures
 
@@ -163,19 +265,20 @@ TypeScript types once and the panel can generate a whole response instead.
 
 ```bash
 npm install --save-dev ts-json-schema-generator   # optional peer, only for this
-npx query-seed extract
+npx data-seed extract
 ```
 
-It reads `query-seed.config.json`:
+It reads `data-seed.config.json`:
 
 ```json
 {
   "tsconfig": "./tsconfig.json",
   "source": "./api.ts",
-  "out": "./query-seed.schemas.json",
-  "queries": [
-    { "key": ["todos"],     "type": "ApiResponse<Todo[]>" },
-    { "key": ["user", "*"], "type": "ApiResponse<User>" }
+  "out": "./data-seed.schemas.json",
+  "targets": [
+    { "key": ["todos"],          "type": "ApiResponse<Todo[]>" },
+    { "key": ["user", "*"],      "type": "ApiResponse<User>" },
+    { "route": "GET /v1/profile", "type": "Profile" }
   ]
 }
 ```
@@ -183,13 +286,15 @@ It reads `query-seed.config.json`:
 Then pass the result to the hook, alongside your fixtures:
 
 ```ts
-useQuerySeeder(queryClient, {
+useSeeder({
+  queryClient,
+  http: true,
   fixtures: require.context('./seeds', false, /\.json$/),
-  schemas: require('./query-seed.schemas.json'),
+  schemas: require('./data-seed.schemas.json'),
 })
 ```
 
-Select a query and a **Generate** button appears, with controls for array length
+Select a target and a **Generate** button appears, with controls for array length
 and which union variant to produce.
 
 ### Seeing the shape
@@ -227,14 +332,17 @@ type Notification =
   | { kind: 'system'; … }
 ```
 
-### The query key map is the part nothing can infer
+### The target map is the part nothing can infer
 
-`"key"` → `"type"` is written by hand, and there is no way around it: TypeScript
-has no idea that `["user", 7]` returns a `User`. `"*"` matches any single
-element, so one entry covers every user. Patterns must match the key's length,
-so `["todos"]` never captures `["todos", "detail", 1]`, and an exact pattern
-beats a wildcard — `["user", 7]` can have its own schema without depending on
-file order.
+`"key"` / `"route"` → `"type"` is written by hand, and there is no way around it:
+TypeScript has no idea that `["user", 7]` returns a `User`, or that
+`GET /v1/profile` returns a `Profile`.
+
+For keys, `"*"` matches any single element, so one entry covers every user, and
+patterns must match the key's length — `["todos"]` never captures
+`["todos", "detail", 1]`. For routes, the glob rules
+[above](#seeding-http) apply. In both cases an exact pattern beats a wildcard, so
+`["user", 7]` can have its own schema without depending on file order.
 
 Generic instantiations work directly. `ApiResponse<Todo[]>` is not a named type
 and cannot be requested from a schema generator, so the CLI writes a temporary
@@ -285,60 +393,73 @@ Generation is reported honestly rather than papered over:
 - **Recursive types stop at a depth cap**, so a comment tree terminates.
 - **Unknown `@faker` tokens** warn instead of silently substituting something.
 
-Generation is seeded, so the same query and roll always produce the same value —
+Generation is seeded, so the same target and roll always produce the same value —
 pressing **Generate** again is what rerolls it.
 
 ## Driving it without DevTools
 
 Everything the panel does is also a `rozenite agent` tool, so a test or a script
-can put the cache into a known state with no DevTools window open. That is the
+can put the app into a known state with no DevTools window open. That is the
 point of having committed fixtures — reaching the state is the slow part of an
 E2E run, not asserting on it.
 
 ```bash
 npx rozenite agent targets
 npx rozenite agent session create
-npx rozenite agent avasapp/query-seed tools -s <session>
+npx rozenite agent avasapp/data-seed tools -s <session>
 
-npx rozenite agent avasapp/query-seed call -s <session> \
-  --tool '@avasapp/rozenite-plugin-query-seed.apply-fixture' \
+npx rozenite agent avasapp/data-seed call -s <session> \
+  --tool '@avasapp/rozenite-plugin-data-seed.apply-fixture' \
   --args '{"fixture": "cart with 50 items"}'
 ```
 
 | Tool | What it does |
 | --- | --- |
-| `list-queries` | Every query in the cache, summarised — values are not returned |
-| `read-query` | One query's value; `found: false` rather than an error when absent |
-| `apply-seed` | Put a JSON value at a key and keep it there |
-| `clear-seed` / `clear-all-seeds` | Withdraw seeds and refetch |
+| `list-targets` | Everything seedable, summarised — values are not returned |
+| `read-target` | One target's value; `found: false` rather than an error when absent |
+| `apply-seed` | Seed a target and keep it seeded |
+| `clear-seed` / `clear-all-seeds` | Withdraw seeds; seeded queries refetch |
 | `list-fixtures` | Bundled fixtures, plus files that failed to parse |
 | `apply-fixture` | Seed from a committed fixture, by id or name |
-| `generate-seed` | Generate from the query's schema; `dryRun` to preview |
+| `generate-seed` | Generate from the target's schema; `dryRun` to preview |
 
-Writes report `persistent`. It is `false` when the `QueryClient` could not be
-hooked, meaning the seed is a one-shot write the next refetch erases — worth
-failing a test over, and far easier to diagnose here than three assertions later.
+Every tool names its target with **exactly one** of `queryKey` or `route`:
+
+```bash
+--args '{"queryKey": ["user", 7], "data": {"name": "Ada"}}'
+--args '{"route": "GET /api/users/*", "data": {}, "status": 500}'
+```
+
+Writes report `persistent`. It is `false` when the adapter could not be hooked,
+meaning the seed is a one-shot write the next fetch erases — worth failing a test
+over, and far easier to diagnose here than three assertions later.
 
 For typed calls from Node, the descriptors are exported:
 
 ```ts
-import { querySeedTools } from '@avasapp/rozenite-plugin-query-seed/sdk'
+import { seedTools } from '@avasapp/rozenite-plugin-data-seed/sdk'
 
-await session.callTool(querySeedTools.applyFixture, {
+await session.callTool(seedTools.applyFixture, {
   fixture: 'cart with 50 items',
 })
 ```
 
 ## Limitations
 
+- **axios is not intercepted yet** — see
+  [What it does not intercept](#what-it-does-not-intercept). An `XMLHttpRequest`
+  patch is the next adapter.
+- **SWR is not supported yet.** The adapter seam exists for it; SWR's `use`
+  middleware is the equivalent hook point.
 - **Authoring fixtures is not scriptable.** Applying them is — see
   [Driving it without DevTools](#driving-it-without-devtools) — but *creating* a
   file goes through the browser, so CI cannot write new ones. The write path sits
   behind a `FixtureStore` interface so a CLI-backed implementation can be added
   without touching the UI.
-- **`queryFn`-level only.** This seeds what a query *resolves to*. It does not
-  mock mutations, sequence responses, or simulate latency — that is a mock
-  server's job, and [MSW](https://mswjs.io) already does it well.
+- **Responses, not conversations.** This seeds what a request or a query
+  *resolves to*. It does not sequence responses across calls, mock mutations, or
+  simulate latency — that is a mock server's job, and [MSW](https://mswjs.io)
+  already does it well.
 
 ## Example app
 
@@ -351,19 +472,43 @@ bun install && bun run build   # repo root
 cd example && bun install && bun run ios
 ```
 
-Seed `["todos"]`, then press **Break the API**. The screen keeps rendering your
-data while every request behind it fails.
+Two things worth trying:
+
+- Seed `["todos"]`, then press **Break the API**. The screen keeps rendering your
+  data while every request behind it fails.
+- The **Profile** card is the only one with no React Query in it — plain `fetch`
+  against a `.invalid` host, so it starts broken by construction. Seed
+  `GET /v1/profile` and it renders; set the status to 503 and it breaks again.
 
 It ships a `seeds/` directory covering the states that are tedious to reach
 against a real backend — an empty list, 200 items, every variant of a
-discriminated union, a 15-level-deep comment tree — plus one deliberately
-malformed file, so the panel's error surface is exercised too.
+discriminated union, a 15-level-deep comment tree, a route outage — plus one
+deliberately malformed file, so the panel's error surface is exercised too. One
+fixture is left in the v1 format on purpose, so the compatibility claim above is
+demonstrated rather than asserted.
 
-Its types are also deliberately hostile — a generic `ApiResponse<T>` envelope,
-an `any` leak, a self-recursive comment tree, a discriminated union, and ISO
-dates carried as `string`. Those are the five shapes that break naive
-TypeScript-to-JSON-Schema extraction, and they are in the repo from day one so
-milestone 3 has something real to fail against.
+Its types are also deliberately hostile — a generic `ApiResponse<T>` envelope, an
+`any` leak, a self-recursive comment tree, a discriminated union, and ISO dates
+carried as `string`. Those are the five shapes that break naive
+TypeScript-to-JSON-Schema extraction.
+
+## Development
+
+```bash
+bun install
+bun test        # 154 tests
+bun typecheck
+bun run build
+bun run presets # regenerate rozenite.config.ts dev presets
+```
+
+`bun dev` starts Rozenite's browser dev host on
+[localhost:8888](http://localhost:8888) for quick panel iteration, using the
+presets in `rozenite.config.ts`. Those are **generated** — that file cannot
+import anything, since Rozenite evaluates it with `new Function` and no `require`
+in scope, so `scripts/build-dev-presets.ts` drives the real adapters and writes
+the literals. Editing them by hand is how they drifted from the wire types last
+time.
 
 ## License
 
