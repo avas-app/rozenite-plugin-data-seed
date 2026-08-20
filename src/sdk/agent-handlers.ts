@@ -128,7 +128,7 @@ export function applySeed(session: Session, args: ApplySeedArgs): ApplySeedResul
   return {
     id: applied.id,
     label: formatRef(target.ref),
-    adapter: target.adapter || session.adapters[0]?.id || '',
+    adapter: applied.adapter,
     persistent: applied.persistent,
   }
 }
@@ -177,7 +177,7 @@ export function applyFixture(
   return {
     fixture: fixture.name,
     label: formatRef(fixture.target),
-    adapter: applied.id.slice(0, applied.id.indexOf(':')),
+    adapter: applied.adapter,
     persistent: applied.persistent,
   }
 }

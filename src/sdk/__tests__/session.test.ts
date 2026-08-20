@@ -149,3 +149,13 @@ describe('seed lifetime', () => {
     globalThis.fetch = originalFetch
   })
 })
+
+describe('reported adapter', () => {
+  test('apply names the adapter that actually took the seed', () => {
+    const { session } = setup()
+    // `adapter` is blank on both, so the search picks — and the *result* has to
+    // say which one won, since the caller cannot infer it from what it sent.
+    expect(session.apply(keyTarget(['todos']), 1)?.adapter).toBe('react-query')
+    expect(session.apply(routeTarget('GET', '/api/todos'), 1)?.adapter).toBe('http')
+  })
+})

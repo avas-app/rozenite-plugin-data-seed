@@ -282,7 +282,7 @@ export class Session {
     target: SeedTarget,
     data: unknown,
     meta?: SeedMeta,
-  ): { id: string; persistent: boolean } | null {
+  ): { id: string; adapter: string; persistent: boolean } | null {
     const resolved = this.#resolve(target)
     if (!resolved) return null
     const { adapter, identity } = resolved
@@ -300,7 +300,13 @@ export class Session {
     // yet, that pass would miss it and the very first refetch would win.
     adapter.push?.(target.ref, data)
     this.flush()
-    return { id: targetId(adapter.id, identity), persistent: adapter.intercept }
+    return {
+      id: targetId(adapter.id, identity),
+      // Reported rather than inferred by the caller: `target.adapter` is
+      // usually blank, since almost everything lets the search pick.
+      adapter: adapter.id,
+      persistent: adapter.intercept,
+    }
   }
 
   /** Clears by the composed id the panel holds. */
