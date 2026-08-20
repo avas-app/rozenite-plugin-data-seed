@@ -43,6 +43,17 @@ const DEFAULTS = {
   maxDepth: 6,
 } as const
 
+/**
+ * A hard ceiling on how many elements any one array gets.
+ *
+ * `minItems` comes off a committed schemas file and `arrayLength` comes from a
+ * caller — the agent tools pass it straight through, and they run on the
+ * device. Neither is a trusted number, and a big enough one is not slow, it is
+ * an out-of-memory crash in the app. Clamping warns rather than failing, since
+ * a shorter array is still a usable seed.
+ */
+const MAX_ARRAY_ITEMS = 1000
+
 /** What the generator could not do, so the panel can say so rather than lie. */
 export type GenerateWarning = {
   path: string
@@ -204,10 +215,17 @@ function buildArray(
 ): unknown[] {
   const items = Array.isArray(node.items) ? node.items[0] : node.items
   if (!items) return []
-  const length = Math.max(
+  const requested = Math.max(
     node.minItems ?? 0,
     Math.min(node.maxItems ?? context.arrayLength, context.arrayLength),
   )
+  const length = Math.min(requested, MAX_ARRAY_ITEMS)
+  if (length < requested) {
+    context.warnings.push({
+      path,
+      reason: `array clamped to ${MAX_ARRAY_ITEMS} items (asked for ${requested})`,
+    })
+  }
   return Array.from({ length }, (_, index) =>
     build(items, context, `${path}[${index}]`, depth, seen),
   )

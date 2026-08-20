@@ -182,27 +182,46 @@ export function displayName(name: string): string {
   return cleaned === '…' ? 'Anonymous' : cleaned
 }
 
+/**
+ * How many nodes one count pass may visit.
+ *
+ * `visiting` stops cycles but not re-walking: a definition referenced from two
+ * places has its whole subtree counted twice, so a diamond-shaped graph costs
+ * exponential time in its depth. That is a hang in the panel's render, with no
+ * error to explain it. Past this many nodes the remaining counts are simply
+ * less accurate, which at worst names a type that could have been inlined.
+ */
+const COUNT_BUDGET = 50_000
+
 function countRefs(
   node: SchemaNode | undefined,
   definitions: Record<string, SchemaNode>,
   counts: Map<string, number>,
   visiting: Set<string>,
+  budget: { left: number } = { left: COUNT_BUDGET },
 ): void {
   if (!node || typeof node !== 'object') return
+  if (budget.left-- <= 0) return
 
   if (node.$ref) {
     const key = refName(node.$ref)
     if (key) {
       counts.set(key, (counts.get(key) ?? 0) + 1)
       if (!visiting.has(key) && definitions[key]) {
-        countRefs(definitions[key], definitions, counts, new Set([...visiting, key]))
+        countRefs(
+          definitions[key],
+          definitions,
+          counts,
+          new Set([...visiting, key]),
+          budget,
+        )
       }
     }
     return
   }
 
   for (const child of children(node)) {
-    countRefs(child, definitions, counts, visiting)
+    countRefs(child, definitions, counts, visiting, budget)
   }
 }
 

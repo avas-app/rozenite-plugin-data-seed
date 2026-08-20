@@ -282,3 +282,60 @@ describe('the token catalogue', () => {
     expect(sampleToken('person.fullName')).toBe(sampleToken('person.fullName'))
   })
 })
+
+describe('adversarial input', () => {
+  test('a huge minItems is clamped instead of exhausting memory', () => {
+    // `minItems` comes off a committed schemas file, so it is not a trusted
+    // number, and a big enough one is an out-of-memory crash in the app.
+    const { value, warnings } = generate({
+      type: 'array',
+      minItems: 5_000_000,
+      items: { type: 'string' },
+    })
+    expect((value as unknown[]).length).toBe(1000)
+    expect(warnings[0].reason).toMatch(/clamped to 1000 items \(asked for 5000000\)/)
+  })
+
+  test('a huge arrayLength from the caller is clamped too', () => {
+    // The agent tools pass `items` straight through, and they run on-device.
+    const { value } = generate(
+      { type: 'array', items: { type: 'number' } },
+      { arrayLength: 1e9 },
+    )
+    expect((value as unknown[]).length).toBe(1000)
+  })
+
+  test('an ordinary array is untouched and warns about nothing', () => {
+    const { value, warnings } = generate({
+      type: 'array',
+      minItems: 4,
+      items: { type: 'string' },
+    })
+    expect((value as unknown[]).length).toBe(4)
+    expect(warnings).toEqual([])
+  })
+
+  test('a $ref that is not valid percent encoding warns rather than throwing', () => {
+    // `decodeURIComponent('%E0%A4%A')` throws a URIError; the panel's generate
+    // call is not wrapped, so this reached its render.
+    const { value, warnings } = generate({
+      $ref: '#/definitions/%E0%A4%A',
+      definitions: {},
+    })
+    expect(value).toBeNull()
+    expect(warnings[0].reason).toMatch(/unresolved \$ref/)
+  })
+
+  test('a null where a subschema should be does not take the object with it', () => {
+    const { value } = generate({
+      type: 'object',
+      properties: {
+        good: { type: 'string' },
+        broken: null as never,
+      },
+      required: ['good', 'broken'],
+    })
+    expect(typeof (value as Record<string, unknown>).good).toBe('string')
+    expect((value as Record<string, unknown>).broken).toBeNull()
+  })
+})

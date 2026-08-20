@@ -296,7 +296,19 @@ export function installReactQueryAdapter(
 
   // ---- cache observation ----
 
-  disposers.push(client.getQueryCache().subscribe(() => session.scheduleFlush()))
+  // Guarded for the same reason `defaultQueryOptions` is above: this runs inside
+  // the app's mount effect, so a `queryClient` that is not what we assume takes
+  // the app's tree down rather than this adapter's live updates. Without the
+  // subscription the panel goes stale until something else flushes; with an
+  // exception, the app does not render.
+  try {
+    const cache = client.getQueryCache?.()
+    if (typeof cache?.subscribe === 'function') {
+      disposers.push(cache.subscribe(() => session.scheduleFlush()))
+    }
+  } catch {
+    // Degrade to a panel that refreshes on its own actions only.
+  }
 
   return () => {
     for (const dispose of disposers.reverse()) {

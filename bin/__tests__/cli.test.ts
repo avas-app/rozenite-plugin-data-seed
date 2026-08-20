@@ -24,6 +24,14 @@ import {
 
 const CLI = path.resolve(import.meta.dir, '../data-seed.mjs')
 
+/**
+ * Each of these spawns the CLI, which builds a whole TypeScript program — twice
+ * over for the run-it-again cases. Bun's 5s default is enough on an idle
+ * machine and not enough under load, which makes for a test that fails for
+ * reasons that have nothing to do with the code.
+ */
+const E2E_TIMEOUT = 60_000
+
 describe('argument parsing', () => {
   test('reads the flags it documents', () => {
     const args = parseArgs(['extract', '--cwd', '/tmp/app', '--config', 'x.json'])
@@ -434,7 +442,7 @@ describe('running it', () => {
       'Good',
       'Holder',
     ])
-  })
+  }, E2E_TIMEOUT)
 
   test('a clean config exits zero and rewrites nothing on a second run', () => {
     const root = project('clean', {
@@ -458,7 +466,7 @@ describe('running it', () => {
     // A committed file that changes on every run trains people to skip the diff.
     expect(second.output).toContain('unchanged')
     expect(JSON.parse(fs.readFileSync(out, 'utf8')).generatedAt).toBe(stamp)
-  })
+  }, E2E_TIMEOUT)
 
   test('a source that does not resolve fails before extracting anything', () => {
     const root = project('no-source', {
@@ -472,7 +480,7 @@ describe('running it', () => {
     expect(code).toBe(1)
     expect(output).toMatch(/"source" does not resolve/)
     expect(fs.existsSync(path.join(root, 'data-seed.schemas.json'))).toBe(false)
-  })
+  }, E2E_TIMEOUT)
 
   test('the temporary shim never survives the run', () => {
     const root = project('shim', {
@@ -485,7 +493,7 @@ describe('running it', () => {
     })
     run(root)
     expect(fs.readdirSync(root).filter((name) => name.startsWith('.data-seed'))).toEqual([])
-  })
+  }, E2E_TIMEOUT)
 
   test('an existing file is never claimed as the shim, or deleted', () => {
     const root = project('collision', {
@@ -502,7 +510,7 @@ describe('running it', () => {
     expect(fs.readFileSync(path.join(root, '.data-seed-extract.ts'), 'utf8')).toBe(
       '// someone else owns this\n',
     )
-  })
+  }, E2E_TIMEOUT)
 
   test('a mistyped config key is named instead of silently ignored', () => {
     const root = project('typo', {
@@ -516,7 +524,7 @@ describe('running it', () => {
     })
     const { output } = run(root)
     expect(output).toMatch(/unknown config key "sources"/)
-  })
+  }, E2E_TIMEOUT)
 
   test('a route that can never match is warned about, not silently accepted', () => {
     const root = project('route-warn', {
@@ -531,7 +539,7 @@ describe('running it', () => {
     // Extraction succeeded — the schema is fine, the pattern is the problem.
     expect(code).toBe(0)
     expect(output).toMatch(/does not start with "\/"/)
-  })
+  }, E2E_TIMEOUT)
 
   test('every target failing points at the source rather than at each type', () => {
     const root = project('all-hollow', {
@@ -548,7 +556,7 @@ describe('running it', () => {
     const { code, output } = run(root)
     expect(code).toBe(1)
     expect(output).toMatch(/Nothing at all resolved/)
-  })
+  }, E2E_TIMEOUT)
 
   test('an unparseable config says so instead of throwing', () => {
     const root = project('bad-json', {
@@ -559,5 +567,5 @@ describe('running it', () => {
     expect(code).toBe(1)
     expect(output).toMatch(/is not valid JSON/)
     expect(output).not.toMatch(/at Object\./) // no stack trace
-  })
+  }, E2E_TIMEOUT)
 })
