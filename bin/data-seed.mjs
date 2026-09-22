@@ -995,7 +995,12 @@ async function tokens() {
     )
   }
   console.log('\n  Unannotated strings become lorem text; unannotated numbers are')
-  console.log('  whole. `@faker` is the original spelling of the tag and still works.\n')
+  console.log('  whole. `@faker` is the original spelling of the tag and still works.')
+  // "before the epoch" in the summaries above invites the question, and the
+  // answer is the one thing about dates that surprises people.
+  console.log('\n  `date.*` is offset from a fixed epoch, not from now, because the same')
+  console.log('  seed has to give the same value every run. Assert on ordering or')
+  console.log('  format — never that a generated timestamp is close to the clock.\n')
 }
 
 // ------------------------------------------------------------------ main

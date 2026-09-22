@@ -460,10 +460,10 @@ export const TOKENS: readonly TokenDoc[] = [
   { token: 'lorem.words', summary: 'Space-separated words', args: 'count = 3' },
   { token: 'lorem.sentence', summary: 'One capitalised sentence', args: 'count = 8' },
   { token: 'lorem.paragraph', summary: 'Three sentences' },
-  { token: 'date.recent', summary: 'ISO timestamp, within the last week' },
-  { token: 'date.past', summary: 'ISO timestamp, within the last year' },
-  { token: 'date.soon', summary: 'ISO timestamp, within the next week' },
-  { token: 'date.future', summary: 'ISO timestamp, within the next year' },
+  { token: 'date.recent', summary: 'ISO timestamp, up to a week before the epoch' },
+  { token: 'date.past', summary: 'ISO timestamp, up to a year before the epoch' },
+  { token: 'date.soon', summary: 'ISO timestamp, up to a week after the epoch' },
+  { token: 'date.future', summary: 'ISO timestamp, up to a year after the epoch' },
   { token: 'number.int', summary: 'A whole number', args: 'min = 1, max = 1000' },
   { token: 'number.float', summary: 'A number with two decimals', args: 'min = 0, max = 1' },
   { token: 'datatype.boolean', summary: 'true or false' },
@@ -519,13 +519,21 @@ function uuid(random: () => number): string {
  * Generation has to be reproducible for the same seed, and a value derived from
  * the current time is the one thing that cannot be. The absolute dates are
  * arbitrary; what matters is that they are stable and correctly ordered.
+ *
+ * The consequence is worth stating, because it is the kind of thing that gets
+ * read as a bug: `date.recent` drifts further into the past as real time moves
+ * away from this constant, so a caller asserting "within the last hour" writes
+ * a test that fails for reasons unconnected to their code. Bumping the epoch
+ * would not fix that — it would go stale again, and it would change every
+ * value already generated from a committed schema. `date.*` means "ordered
+ * relative to the epoch", not "near now", and the token docs say so.
  */
-const EPOCH = Date.UTC(2026, 0, 1)
+export const DATE_EPOCH = Date.UTC(2026, 0, 1)
 
 function isoDate(random: () => number, offsetDays: number): string {
   const jitter = random() * Math.abs(offsetDays) * 86_400_000
   const direction = offsetDays < 0 ? -1 : 1
-  return new Date(EPOCH + direction * jitter).toISOString()
+  return new Date(DATE_EPOCH + direction * jitter).toISOString()
 }
 
 /** mulberry32 — small, fast, and good enough for fixture data. */
