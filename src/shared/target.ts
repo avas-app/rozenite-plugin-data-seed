@@ -128,10 +128,17 @@ function urlPathWithQuery(url: string): string {
  *
  * Route patterns are strings like `GET /api/users/*`; key patterns are arrays
  * with `"*"` standing for one element.
+ *
+ * A `type` pattern selects nothing at all. It exists so the schemas file can
+ * carry a schema for a type that has no query key and no URL — an envelope that
+ * arrives over a websocket or a realtime channel, say. Nothing in this plugin
+ * can seed one; the entry is there for whatever *does* own that transport to
+ * read, which is why extraction is worth doing for it and matching is not.
  */
 export type TargetPattern =
   | { kind: 'key'; key: unknown[] }
   | { kind: 'route'; method: string; glob: string }
+  | { kind: 'type'; name: string }
 
 /** The method wildcard, and the element wildcard in a key pattern. */
 export const WILDCARD = '*'
@@ -164,6 +171,7 @@ export function formatRoutePattern(pattern: {
 /** How a pattern is shown in the panel and in agent output. */
 export function formatPattern(pattern: TargetPattern): string {
   if (pattern.kind === 'route') return formatRoutePattern(pattern)
+  if (pattern.kind === 'type') return pattern.name
   try {
     return JSON.stringify(pattern.key)
   } catch {
@@ -237,6 +245,10 @@ export function matchesTarget(pattern: TargetPattern, ref: TargetRef): boolean {
   if (pattern.kind === 'key') {
     return ref.kind === 'key' && matchesKey(pattern.key, ref.key)
   }
+  // A type pattern names a type, not an address, so no observed ref is it.
+  // Returning false rather than throwing keeps such an entry inert: it rides
+  // along in the schemas file and is skipped by every lookup here.
+  if (pattern.kind === 'type') return false
   return ref.kind === 'route' && matchesRoute(pattern, ref.method, ref.url)
 }
 
@@ -251,6 +263,9 @@ export function patternLooseness(pattern: TargetPattern): number {
   if (pattern.kind === 'key') {
     return pattern.key.filter((part) => part === WILDCARD).length
   }
+  // Never actually compared — `findByTarget` only ranks patterns that matched,
+  // and a type pattern never does. Exact, because it names exactly one type.
+  if (pattern.kind === 'type') return 0
   const doubles = (pattern.glob.match(/\*\*/g) ?? []).length
   const singles = (pattern.glob.match(/\*/g) ?? []).length - doubles * 2
   const anyMethod = pattern.method === WILDCARD ? 1 : 0
@@ -276,19 +291,34 @@ export function findByTarget<T extends { pattern: TargetPattern }>(
  * route pattern is a string. Keeping the authored form that terse matters more
  * than symmetry — `["user", "*"]` and `"GET /api/users/*"` both read as what
  * they are, where a tagged object would read as neither.
+ *
+ * A type pattern is the one that has to be tagged: `{"name": "RealtimePayload"}`
+ * is neither an array nor a path, and spelling it as a bare string would make
+ * it indistinguishable from a route that forgot its leading slash.
  */
-export type TargetPatternJson = unknown[] | string
+export type TargetPatternJson = unknown[] | string | { name: string }
 
 export function parseTargetPattern(raw: TargetPatternJson): TargetPattern {
   if (Array.isArray(raw)) return { kind: 'key', key: raw }
   if (typeof raw === 'string') return { kind: 'route', ...parseRoutePattern(raw) }
-  throw new Error('a pattern must be an array (query key) or a string (route)')
+  if (raw && typeof raw === 'object') {
+    const { name } = raw as { name?: unknown }
+    if (typeof name === 'string' && name.trim() !== '') {
+      return { kind: 'type', name: name.trim() }
+    }
+    throw new Error('a {"name": …} pattern needs a non-empty name')
+  }
+  throw new Error(
+    'a pattern must be an array (query key), a string (route), or {"name": …} (type)',
+  )
 }
 
 export function serializeTargetPattern(
   pattern: TargetPattern,
 ): TargetPatternJson {
-  return pattern.kind === 'key' ? pattern.key : formatRoutePattern(pattern)
+  if (pattern.kind === 'key') return pattern.key
+  if (pattern.kind === 'type') return { name: pattern.name }
+  return formatRoutePattern(pattern)
 }
 
 /** The same two-form rule for refs, used by fixtures and the bridge. */

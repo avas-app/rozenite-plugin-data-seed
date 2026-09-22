@@ -119,7 +119,8 @@ function help() {
     "targets": [
       { "key": ["todos"],           "type": "ApiResponse<Todo[]>" },
       { "key": ["user", "*"],       "type": "ApiResponse<User>"   },
-      { "route": "GET /api/todos",  "type": "ApiResponse<Todo[]>" }
+      { "route": "GET /api/todos",  "type": "ApiResponse<Todo[]>" },
+      { "name": "RealtimePayload",  "type": "RealtimePayload"     }
     ]
   }
 
@@ -127,7 +128,7 @@ function help() {
   config, or a package specifier like "@app/state/queries". Every target type
   has to be reachable from that one module.
 
-  A target is named by "key" or by "route", never both.
+  A target is named by exactly one of "key", "route" or "name".
 
     key    "*" matches any single element, so ["user", "*"] covers every user.
     route  "*" matches within a path segment and "**" crosses segments, so
@@ -135,6 +136,10 @@ function help() {
            An omitted method matches any. The path is the one on the wire,
            including any base path the client prepends — "**" is the escape
            hatch when that varies by environment.
+    name   Any TypeScript type, with no key and no URL — an envelope that
+           arrives over a websocket or a realtime channel, say. The schema is
+           extracted and written under that name for other tooling to read.
+           This plugin cannot seed one: it has no address to intercept.
 
   Annotate fields in your own source to control generated values:
 
@@ -234,13 +239,21 @@ export function validateTargets(raw) {
 
     const hasKey = 'key' in target && target.key !== undefined
     const hasRoute = 'route' in target && target.route !== undefined
+    const hasName = 'name' in target && target.name !== undefined
 
-    if (hasKey && hasRoute) {
-      rejected.push({ label: at, message: 'sets both "key" and "route"; pick one' })
+    const selectors = [hasKey, hasRoute, hasName].filter(Boolean).length
+    if (selectors > 1) {
+      rejected.push({
+        label: at,
+        message: 'sets more than one of "key", "route" and "name"; pick one',
+      })
       return
     }
-    if (!hasKey && !hasRoute) {
-      rejected.push({ label: at, message: 'needs a "key" array or a "route" string' })
+    if (selectors === 0) {
+      rejected.push({
+        label: at,
+        message: 'needs a "key" array, a "route" string, or a "name" string',
+      })
       return
     }
     if (hasKey && !Array.isArray(target.key)) {
@@ -255,14 +268,32 @@ export function validateTargets(raw) {
       rejected.push({ label: at, message: '"route" must be a non-empty string' })
       return
     }
+    if (hasName && (typeof target.name !== 'string' || target.name.trim() === '')) {
+      rejected.push({ label: at, message: '"name" must be a non-empty string' })
+      return
+    }
     if (typeof target.type !== 'string' || target.type.trim() === '') {
-      const named = hasKey ? JSON.stringify(target.key) : String(target.route).trim()
+      const named = hasKey
+        ? JSON.stringify(target.key)
+        : String(hasRoute ? target.route : target.name).trim()
       rejected.push({ label: `${at} (${named})`, message: 'needs a "type"' })
       return
     }
 
-    const pattern = hasKey ? target.key : target.route.trim()
-    const label = hasKey ? JSON.stringify(target.key) : pattern
+    // A name target is stored tagged, because `{"name": …}` is the only one of
+    // the three that a reader cannot tell apart from the others by shape.
+    let pattern
+    let label
+    if (hasKey) {
+      pattern = target.key
+      label = JSON.stringify(target.key)
+    } else if (hasRoute) {
+      pattern = target.route.trim()
+      label = pattern
+    } else {
+      label = target.name.trim()
+      pattern = { name: label }
+    }
     targets.push({ pattern, label, type: target.type.trim(), index })
   })
 

@@ -333,7 +333,8 @@ It reads `data-seed.config.json`:
   "targets": [
     { "key": ["todos"],          "type": "ApiResponse<Todo[]>" },
     { "key": ["user", "*"],      "type": "ApiResponse<User>" },
-    { "route": "GET /v1/profile", "type": "Profile" }
+    { "route": "GET /v1/profile", "type": "Profile" },
+    { "name": "RealtimePayload",  "type": "RealtimePayload<PresenceEvent>" }
   ]
 }
 ```
@@ -426,6 +427,38 @@ patterns must match the key's length — `["todos"]` never captures
 Generic instantiations work directly. `ApiResponse<Todo[]>` is not a named type
 and cannot be requested from a schema generator, so the CLI writes a temporary
 module that names it, extracts, and deletes it.
+
+### Types with no key and no route
+
+Some types are not reachable from either: a realtime envelope that arrives over
+a websocket or an Ably channel has no query key and no URL. Name one with
+`"name"` and its schema is extracted like any other:
+
+```json
+{ "name": "RealtimePayload", "type": "RealtimePayload<PresenceEvent>" }
+```
+
+`"name"` is the handle the entry is written under; `"type"` is the TypeScript
+expression, so a generic instantiation gets a short stable name rather than
+`RealtimePayload<PresenceEvent>` spelled out at every lookup. Exactly one of
+`"key"`, `"route"` and `"name"` per target.
+
+It lands in the schemas file as a tagged pattern, alongside the key and route
+entries:
+
+```json
+{ "pattern": { "name": "RealtimePayload" }, "type": "…", "schema": { … } }
+```
+
+**This plugin cannot seed such a target** — it has no address to intercept, so
+it never appears in the panel and never matches a request. The entry is there
+for whatever *does* own that transport to read. Extraction is the part worth
+sharing: the `@fake` annotations, the `$ref` graph and the enum resolution are
+the same work regardless of how the bytes arrive.
+
+Older readers are unaffected in the way that matters: a plugin predating this
+skips that one entry, names it in a warning, and loads every key and route
+entry around it.
 
 ### Controlling the values
 
