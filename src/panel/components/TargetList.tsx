@@ -160,7 +160,7 @@ function Row({
         </span>
 
         <span className="flex items-center gap-2">
-          <Badge className={toneBadgeClass(tone)} variant="secondary">
+          <Badge className={toneBadgeClass(tone)} tone="neutral">
             {item.seeded ? 'seeded' : statusLabel(item)}
           </Badge>
           <span className="truncate text-[11px] text-muted-foreground">
@@ -222,7 +222,8 @@ function AddRoute({ onAdd }: { onAdd: (ref: TargetRef) => void }) {
       <Button
         aria-label="Add route"
         disabled={!value.trim()}
-        size="compact"
+        size="sm"
+        tone="neutral"
         type="submit"
         variant="outline"
       >

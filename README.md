@@ -26,9 +26,14 @@ Plus:
 npm install --save-dev @avasapp/rozenite-plugin-data-seed
 ```
 
-Requires **Rozenite 2.1 or later**. Rozenite discovers the plugin automatically —
-no `metro.config` change is needed beyond having Rozenite itself set up. TanStack
-Query v5 is optional; so is having a query library at all.
+Requires **Rozenite 2.2 or later**. The Rozenite bridges are peer dependencies,
+so the plugin binds to the copy your app already has — installing it never pulls
+a second agent bridge, which would give the app two tool registries and let the
+plugin register into the one the CLI is not talking to.
+
+Rozenite discovers the plugin automatically — no `metro.config` change is needed
+beyond having Rozenite itself set up. TanStack Query v5 is optional; so is having
+a query library at all.
 
 ## Usage
 

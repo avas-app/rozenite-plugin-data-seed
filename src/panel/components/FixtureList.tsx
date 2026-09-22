@@ -144,7 +144,7 @@ function WriteFooter({
         <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
           Access to {state.label} lapsed
         </span>
-        <Button onClick={() => void actions.reconnect()} size="compact" variant="outline">
+        <Button onClick={() => void actions.reconnect()} size="sm" tone="neutral" variant="outline">
           Reconnect
         </Button>
       </div>
@@ -158,7 +158,7 @@ function WriteFooter({
           <span className="min-w-0 flex-1 text-[11px] text-muted-foreground">
             Choose a folder to save new fixtures
           </span>
-          <Button onClick={() => void actions.connect()} size="compact" variant="outline">
+          <Button onClick={() => void actions.connect()} size="sm" tone="neutral" variant="outline">
             <FolderOpen className="size-3.5" />
             Choose
           </Button>

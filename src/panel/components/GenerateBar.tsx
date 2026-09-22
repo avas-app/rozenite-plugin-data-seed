@@ -103,14 +103,15 @@ export function GenerateBar({
         <Button
           aria-label="@fake tokens"
           onClick={() => setShowTokens((open) => !open)}
-          size="compact"
+          size="sm"
           title="@fake tokens"
+          tone="neutral"
           variant="outline"
         >
           <Tags className="size-3.5" />
         </Button>
 
-        <Button disabled={loading} onClick={onGenerate} size="compact">
+        <Button disabled={loading} onClick={onGenerate} size="sm">
           <Dices className="size-3.5" />
           {loading ? 'Loading…' : 'Generate'}
         </Button>

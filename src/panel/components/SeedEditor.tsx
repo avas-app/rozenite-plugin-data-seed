@@ -178,12 +178,13 @@ export function SeedEditor({
             placeholder="cart with 50 items"
             value={savingName}
           />
-          <Button disabled={!savingName.trim()} size="compact" type="submit">
+          <Button disabled={!savingName.trim()} size="sm" type="submit">
             Save
           </Button>
           <Button
             onClick={() => setSavingName(null)}
-            size="compact"
+            size="sm"
+            tone="neutral"
             type="button"
             variant="outline"
           >
@@ -223,7 +224,8 @@ export function SeedEditor({
             <Button
               disabled={Boolean(parsed.error)}
               onClick={() => setSavingName(target.fixtureName ?? '')}
-              size="compact"
+              size="sm"
+              tone="neutral"
               variant="outline"
             >
               <Save className="size-3.5" />
@@ -231,7 +233,7 @@ export function SeedEditor({
             </Button>
           ) : null}
           {seeded ? (
-            <Button onClick={onClear} size="compact" variant="outline">
+            <Button onClick={onClear} size="sm" tone="neutral" variant="outline">
               Remove seed
             </Button>
           ) : null}
@@ -245,7 +247,7 @@ export function SeedEditor({
           <Button
             disabled={Boolean(parsed.error) || (isRoute && !statusValid)}
             onClick={() => onApply(seedTarget, parsed.value, meta)}
-            size="compact"
+            size="sm"
           >
             {seeded ? 'Update seed' : 'Apply seed'}
           </Button>

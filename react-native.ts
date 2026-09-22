@@ -1,7 +1,8 @@
 /**
  * React Native entry point.
  *
- * Built to `dist/react-native/index.{js,cjs,d.ts}` and consumed as
+ * Built to `dist/react-native/` by the Rozenite builder, which owns the output
+ * filenames and the `exports` map that points at them, and consumed as
  * `import { useSeeder } from '@avasapp/rozenite-plugin-data-seed'`.
  *
  * Note there is no `@tanstack/react-query` dependency anywhere in this package —

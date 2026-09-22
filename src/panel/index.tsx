@@ -281,7 +281,7 @@ useSeeder({ queryClient, http: true })`}
             <span className="text-xs text-muted-foreground">
               {state.seeds.length} active
             </span>
-            <Button onClick={actions.clearAll} size="compact" variant="outline">
+            <Button onClick={actions.clearAll} size="sm" tone="neutral" variant="outline">
               Remove all seeds
             </Button>
           </>

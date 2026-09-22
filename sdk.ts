@@ -1,7 +1,8 @@
 /**
  * Agent SDK entry point.
  *
- * Built to `dist/sdk/index.{js,cjs,d.ts}` and consumed as
+ * Built to `dist/sdk/` by the Rozenite builder, which owns the output filenames
+ * and the `exports` map that points at them, and consumed as
  * `import { seedTools } from '@avasapp/rozenite-plugin-data-seed/sdk'`,
  * which gives `@rozenite/agent-sdk` callers typed descriptors instead of
  * stringly-typed tool names:
