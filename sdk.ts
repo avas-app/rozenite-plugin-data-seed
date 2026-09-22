@@ -34,6 +34,33 @@ export { seedToolDefinitions, PLUGIN_ID }
 export { TOKENS, TOKEN_NAMES, sampleToken } from './src/shared/generate'
 export type { TokenDoc } from './src/shared/generate'
 
+/**
+ * Reading a committed schemas file and generating from it, outside the app.
+ *
+ * The panel and the device already do this internally; these are the same two
+ * functions, exported so a Node caller can do it too. The case they exist for
+ * is a target this plugin cannot seed — a `{"name": …}` entry, extracted for a
+ * type that arrives over a transport with no query key and no URL. Whatever
+ * owns that transport generates the payload here, on the host, and hands it
+ * over already built.
+ *
+ * Generating host-side rather than on-device is the point. The alternative
+ * puts both the schema document and the generator in the app's bundle and
+ * makes this package a runtime dependency of any app that wants payloads for
+ * some other transport, which is a lot of weight for data the device did not
+ * need to produce.
+ *
+ * Node-safe, and a test pins that: this entry reaches nothing under `src/sdk/`
+ * or `src/panel/`, so importing it pulls in no React and no React Native.
+ */
+export { parseSchemasFile } from './src/shared/schema'
+export { generate } from './src/shared/generate'
+export type {
+  GenerateOptions,
+  GenerateResult,
+  GenerateWarning,
+} from './src/shared/generate'
+
 /** Tool descriptors bound to this plugin's domain, for `session.callTool`. */
 export const seedTools = defineAgentToolDescriptors(
   PLUGIN_ID,
