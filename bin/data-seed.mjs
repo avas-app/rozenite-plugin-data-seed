@@ -942,14 +942,24 @@ function sdkEntryPoints() {
  */
 async function tokens() {
   let catalogue
+  let unloadable
   for (const entry of sdkEntryPoints()) {
     if (!existsAsFile(entry)) continue
     try {
       catalogue = await import(pathToFileURL(entry).href)
       break
-    } catch {
-      // Present but unloadable — try the next spelling before giving up.
+    } catch (error) {
+      // Present but unloadable — try the next spelling before giving up, and
+      // keep the first failure: "not built" would be a lie about a broken build.
+      unloadable ??= { entry, error }
     }
+  }
+  if (!catalogue && unloadable) {
+    fail(
+      `the built package could not be loaded.\n` +
+        `  ${path.relative(process.cwd(), unloadable.entry)}: ${reason(unloadable.error)}\n` +
+        '  Try rebuilding it. From a checkout, run: bun run build',
+    )
   }
   if (!catalogue) {
     fail(
