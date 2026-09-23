@@ -41,10 +41,10 @@ what you get — though values vary with the seed, and **Generate** rerolls them
 | `lorem.words` | Space-separated words | `count = 3` | `amet dolor lorem` |
 | `lorem.sentence` | One capitalised sentence | `count = 8` | `Sit amet dolor consectetur adipiscing ipsum amet ad…` |
 | `lorem.paragraph` | Three sentences |  | `Dolor elit sit lorem amet elit dolor ipsum lorem lo…` |
-| `date.recent` | ISO timestamp, within the last week |  | `2025-12-31T06:51:51.901Z` |
-| `date.past` | ISO timestamp, within the last year |  | `2025-11-04T18:19:29.576Z` |
-| `date.soon` | ISO timestamp, within the next week |  | `2026-01-03T06:07:16.830Z` |
-| `date.future` | ISO timestamp, within the next year |  | `2026-03-19T08:07:35.241Z` |
+| `date.recent` | ISO timestamp, up to a week before the epoch |  | `2025-12-31T06:51:51.901Z` |
+| `date.past` | ISO timestamp, up to a year before the epoch |  | `2025-11-04T18:19:29.576Z` |
+| `date.soon` | ISO timestamp, up to a week after the epoch |  | `2026-01-03T06:07:16.830Z` |
+| `date.future` | ISO timestamp, up to a year after the epoch |  | `2026-03-19T08:07:35.241Z` |
 | `number.int` | A whole number | `min = 1, max = 1000` | `959` |
 | `number.float` | A number with two decimals | `min = 0, max = 1` | `0.29` |
 | `datatype.boolean` | true or false |  | `true` |
@@ -52,6 +52,19 @@ what you get — though values vary with the seed, and **Generate** rerolls them
 | `location.city` | A city name |  | `Osaka` |
 | `location.country` | A country name |  | `Portugal` |
 | `location.streetAddress` | A street address |  | `597 Lovelace Street` |
+
+### `date.*` is relative to a fixed epoch, not to now
+
+Every date token is offset from **2026-01-01**,
+not from the current time. Generation has to be reproducible — the same seed and
+schema must give the same object every run, which a value read off the clock
+cannot do.
+
+So `date.recent` means "up to a week before the epoch", and it sits further in
+the past the further real time moves from that date. Assert on ordering
+(`createdAt` before `updatedAt`) or on the format; a test asserting a generated
+timestamp is within the last hour will fail for reasons that have nothing to do
+with the code under test.
 
 ## What unannotated fields produce
 

@@ -1,7 +1,8 @@
 /**
  * Agent SDK entry point.
  *
- * Built to `dist/sdk/index.{js,cjs,d.ts}` and consumed as
+ * Built to `dist/sdk/` by the Rozenite builder, which owns the output filenames
+ * and the `exports` map that points at them, and consumed as
  * `import { seedTools } from '@avasapp/rozenite-plugin-data-seed/sdk'`,
  * which gives `@rozenite/agent-sdk` callers typed descriptors instead of
  * stringly-typed tool names:
@@ -32,6 +33,18 @@ export { seedToolDefinitions, PLUGIN_ID }
  */
 export { TOKENS, TOKEN_NAMES, sampleToken } from './src/shared/generate'
 export type { TokenDoc } from './src/shared/generate'
+
+/**
+ * Reading a schemas file and generating from it in Node, for `{"name": …}`
+ * targets this plugin cannot seed. Pulls in no React or React Native.
+ */
+export { parseSchemasFile } from './src/shared/schema'
+export { generate } from './src/shared/generate'
+export type {
+  GenerateOptions,
+  GenerateResult,
+  GenerateWarning,
+} from './src/shared/generate'
 
 /** Tool descriptors bound to this plugin's domain, for `session.callTool`. */
 export const seedTools = defineAgentToolDescriptors(

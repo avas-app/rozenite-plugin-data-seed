@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 /**
  * `data-seed extract` — turns the app's TypeScript types into JSON Schemas the
@@ -119,7 +119,8 @@ function help() {
     "targets": [
       { "key": ["todos"],           "type": "ApiResponse<Todo[]>" },
       { "key": ["user", "*"],       "type": "ApiResponse<User>"   },
-      { "route": "GET /api/todos",  "type": "ApiResponse<Todo[]>" }
+      { "route": "GET /api/todos",  "type": "ApiResponse<Todo[]>" },
+      { "name": "RealtimePayload",  "type": "RealtimePayload"     }
     ]
   }
 
@@ -127,7 +128,7 @@ function help() {
   config, or a package specifier like "@app/state/queries". Every target type
   has to be reachable from that one module.
 
-  A target is named by "key" or by "route", never both.
+  A target is named by exactly one of "key", "route" or "name".
 
     key    "*" matches any single element, so ["user", "*"] covers every user.
     route  "*" matches within a path segment and "**" crosses segments, so
@@ -135,6 +136,10 @@ function help() {
            An omitted method matches any. The path is the one on the wire,
            including any base path the client prepends — "**" is the escape
            hatch when that varies by environment.
+    name   Any TypeScript type, with no key and no URL — an envelope that
+           arrives over a websocket or a realtime channel, say. The schema is
+           extracted and written under that name for other tooling to read.
+           This plugin cannot seed one: it has no address to intercept.
 
   Annotate fields in your own source to control generated values:
 
@@ -234,13 +239,21 @@ export function validateTargets(raw) {
 
     const hasKey = 'key' in target && target.key !== undefined
     const hasRoute = 'route' in target && target.route !== undefined
+    const hasName = 'name' in target && target.name !== undefined
 
-    if (hasKey && hasRoute) {
-      rejected.push({ label: at, message: 'sets both "key" and "route"; pick one' })
+    const selectors = [hasKey, hasRoute, hasName].filter(Boolean).length
+    if (selectors > 1) {
+      rejected.push({
+        label: at,
+        message: 'sets more than one of "key", "route" and "name"; pick one',
+      })
       return
     }
-    if (!hasKey && !hasRoute) {
-      rejected.push({ label: at, message: 'needs a "key" array or a "route" string' })
+    if (selectors === 0) {
+      rejected.push({
+        label: at,
+        message: 'needs a "key" array, a "route" string, or a "name" string',
+      })
       return
     }
     if (hasKey && !Array.isArray(target.key)) {
@@ -255,14 +268,30 @@ export function validateTargets(raw) {
       rejected.push({ label: at, message: '"route" must be a non-empty string' })
       return
     }
+    if (hasName && (typeof target.name !== 'string' || target.name.trim() === '')) {
+      rejected.push({ label: at, message: '"name" must be a non-empty string' })
+      return
+    }
     if (typeof target.type !== 'string' || target.type.trim() === '') {
-      const named = hasKey ? JSON.stringify(target.key) : String(target.route).trim()
+      const named = hasKey
+        ? JSON.stringify(target.key)
+        : String(hasRoute ? target.route : target.name).trim()
       rejected.push({ label: `${at} (${named})`, message: 'needs a "type"' })
       return
     }
 
-    const pattern = hasKey ? target.key : target.route.trim()
-    const label = hasKey ? JSON.stringify(target.key) : pattern
+    let pattern
+    let label
+    if (hasKey) {
+      pattern = target.key
+      label = JSON.stringify(target.key)
+    } else if (hasRoute) {
+      pattern = target.route.trim()
+      label = pattern
+    } else {
+      label = target.name.trim()
+      pattern = { name: label }
+    }
     targets.push({ pattern, label, type: target.type.trim(), index })
   })
 
@@ -871,6 +900,31 @@ function report({ entries, failures, warnings, out, root, source }) {
 // ---------------------------------------------------------------- tokens
 
 /**
+ * The built SDK bundle, read from `exports` because the Rozenite builder names
+ * it (`index.js` under 2.1, `sdk.js` under 2.4). Skips `development`, which is
+ * TypeScript source.
+ */
+function sdkEntryPoints() {
+  const root = path.dirname(fileURLToPath(import.meta.url))
+  const candidates = []
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(root, '../package.json'), 'utf8'),
+    )
+    const sdk = manifest?.exports?.['./sdk']
+    for (const condition of ['import', 'default', 'require']) {
+      const target = sdk?.[condition]
+      if (typeof target === 'string') candidates.push(path.resolve(root, '..', target))
+    }
+  } catch {
+    // Fall back to the known spellings below.
+  }
+  candidates.push(path.resolve(root, '../dist/sdk/sdk.js'))
+  candidates.push(path.resolve(root, '../dist/sdk/index.js'))
+  return candidates.filter((candidate) => !candidate.endsWith('.ts'))
+}
+
+/**
  * Prints every `@fake` token with an example of what it produces.
  *
  * The examples are generated by running the real generator, not written down
@@ -878,9 +932,24 @@ function report({ entries, failures, warnings, out, root, source }) {
  */
 async function tokens() {
   let catalogue
-  try {
-    catalogue = await import('../dist/sdk/index.js')
-  } catch {
+  let unloadable
+  for (const entry of sdkEntryPoints()) {
+    if (!existsAsFile(entry)) continue
+    try {
+      catalogue = await import(pathToFileURL(entry).href)
+      break
+    } catch (error) {
+      unloadable ??= { entry, error }
+    }
+  }
+  if (!catalogue && unloadable) {
+    fail(
+      `the built package could not be loaded.\n` +
+        `  ${path.relative(process.cwd(), unloadable.entry)}: ${reason(unloadable.error)}\n` +
+        '  Try rebuilding it. From a checkout, run: bun run build',
+    )
+  }
+  if (!catalogue) {
     fail(
       'the package is not built.\n' +
         '  `tokens` reads the generator itself so its examples cannot go stale.\n' +
@@ -924,7 +993,10 @@ async function tokens() {
     )
   }
   console.log('\n  Unannotated strings become lorem text; unannotated numbers are')
-  console.log('  whole. `@faker` is the original spelling of the tag and still works.\n')
+  console.log('  whole. `@faker` is the original spelling of the tag and still works.')
+  console.log('\n  `date.*` is offset from a fixed epoch, not from now, because the same')
+  console.log('  seed has to give the same value every run. Assert on ordering or')
+  console.log('  format — never that a generated timestamp is close to the clock.\n')
 }
 
 // ------------------------------------------------------------------ main

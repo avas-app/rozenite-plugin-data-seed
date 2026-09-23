@@ -12,6 +12,7 @@ import {
   parseTargetRef,
   refCovers,
   routeTarget,
+  serializeTargetPattern,
   urlPath,
 } from '../target'
 
@@ -164,6 +165,45 @@ describe('matchesTarget', () => {
     const routePattern = parseTargetPattern('GET /a')
     expect(matchesTarget(routePattern, routeTarget('GET', '/a').ref)).toBe(true)
     expect(matchesTarget(routePattern, keyTarget(['/a']).ref)).toBe(false)
+  })
+})
+
+describe('type patterns', () => {
+  test('round-trip through the on-disk form', () => {
+    const pattern = parseTargetPattern({ name: 'RealtimePayload' })
+    expect(pattern).toEqual({ kind: 'type', name: 'RealtimePayload' })
+    expect(serializeTargetPattern(pattern)).toEqual({ name: 'RealtimePayload' })
+  })
+
+  test('the other two forms still parse the way they always did', () => {
+    expect(serializeTargetPattern(parseTargetPattern(['user', 7]))).toEqual(['user', 7])
+    expect(serializeTargetPattern(parseTargetPattern('GET /a'))).toBe('GET /a')
+  })
+
+  test('a nameless object is rejected rather than becoming an empty name', () => {
+    expect(() => parseTargetPattern({} as { name: string })).toThrow(/non-empty name/)
+    expect(() => parseTargetPattern({ name: '  ' })).toThrow(/non-empty name/)
+  })
+
+  /**
+   * The whole safety argument for this pattern kind: it rides along in the
+   * schemas file and is invisible to everything that seeds. If it ever matched
+   * a ref, a type entry could shadow the route entry that should have served
+   * a request.
+   */
+  test('never matches anything, so it cannot shadow a real target', () => {
+    const pattern = parseTargetPattern({ name: 'RealtimePayload' })
+    expect(matchesTarget(pattern, routeTarget('GET', '/RealtimePayload').ref)).toBe(false)
+    expect(matchesTarget(pattern, keyTarget(['RealtimePayload']).ref)).toBe(false)
+
+    const entries = [
+      { pattern, type: 'RealtimePayload' },
+      { pattern: parseTargetPattern('GET /api/users/7'), type: 'User' },
+    ]
+    expect(findByTarget(entries, routeTarget('GET', '/api/users/7').ref)?.type).toBe(
+      'User',
+    )
+    expect(findByTarget(entries, keyTarget(['anything']).ref)).toBeNull()
   })
 })
 

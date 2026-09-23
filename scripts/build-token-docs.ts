@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { TOKENS, sampleToken } from '../src/shared/generate'
+import { DATE_EPOCH, TOKENS, sampleToken } from '../src/shared/generate'
 
 const OUT = path.resolve(import.meta.dir, '../docs/tokens.md')
 
@@ -70,6 +70,19 @@ The **Example** column is produced by running the generator, so it is exactly
 what you get — though values vary with the seed, and **Generate** rerolls them.
 
 ${table}
+
+### \`date.*\` is relative to a fixed epoch, not to now
+
+Every date token is offset from **${new Date(DATE_EPOCH).toISOString().slice(0, 10)}**,
+not from the current time. Generation has to be reproducible — the same seed and
+schema must give the same object every run, which a value read off the clock
+cannot do.
+
+So \`date.recent\` means "up to a week before the epoch", and it sits further in
+the past the further real time moves from that date. Assert on ordering
+(\`createdAt\` before \`updatedAt\`) or on the format; a test asserting a generated
+timestamp is within the last hour will fail for reasons that have nothing to do
+with the code under test.
 
 ## What unannotated fields produce
 

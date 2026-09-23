@@ -15,7 +15,7 @@ import {
   unwrapAlias,
   validateTargets,
 } from '../data-seed.mjs'
-import { SCHEMAS_VERSION } from '../../src/shared/schema'
+import { parseSchemasFile, SCHEMAS_VERSION } from '../../src/shared/schema'
 import {
   matchesTarget,
   parseTargetPattern,
@@ -61,20 +61,51 @@ describe('target validation', () => {
       { type: 'Neither' },
       { key: [], type: 'Empty' },
       { route: '   ', type: 'Blank' },
+      { name: '  ', type: 'Nameless' },
       { key: ['no-type'] },
       'nonsense',
       { route: 'GET /also-good', type: 'Fine' },
     ])
     expect(targets.map((target) => target.type)).toEqual(['Good', 'Fine'])
-    expect(rejected).toHaveLength(6)
+    expect(rejected).toHaveLength(7)
     expect(rejected.map((item) => item.message)).toEqual([
-      expect.stringMatching(/both/),
-      expect.stringMatching(/"key" array or a "route" string/),
+      expect.stringMatching(/more than one of/),
+      expect.stringMatching(/"key" array, a "route" string, or a "name" string/),
       expect.stringMatching(/must not be empty/),
-      expect.stringMatching(/non-empty string/),
+      expect.stringMatching(/"route" must be a non-empty string/),
+      expect.stringMatching(/"name" must be a non-empty string/),
       expect.stringMatching(/needs a "type"/),
       expect.stringMatching(/must be an object/),
     ])
+  })
+
+  test('a "name" target is accepted and stored tagged', () => {
+    const { targets, rejected } = validateTargets([
+      { name: 'RealtimePayload', type: 'RealtimePayload<PresenceEvent>' },
+    ])
+    expect(rejected).toEqual([])
+    expect(targets[0]).toMatchObject({
+      pattern: { name: 'RealtimePayload' },
+      label: 'RealtimePayload',
+      type: 'RealtimePayload<PresenceEvent>',
+    })
+  })
+
+  test('a "name" target cannot also carry a key or a route', () => {
+    const { rejected } = validateTargets([
+      { name: 'X', route: 'GET /x', type: 'X' },
+      { name: 'Y', key: ['y'], type: 'Y' },
+    ])
+    expect(rejected.map((item) => item.message)).toEqual([
+      expect.stringMatching(/more than one of/),
+      expect.stringMatching(/more than one of/),
+    ])
+  })
+
+  test('a "name" target with no type is named in the rejection', () => {
+    const { rejected } = validateTargets([{ name: 'RealtimePayload' }])
+    expect(rejected[0].label).toContain('RealtimePayload')
+    expect(rejected[0].message).toMatch(/needs a "type"/)
   })
 
   test('keeps the original index, so shim aliases stay aligned', () => {
@@ -430,7 +461,7 @@ describe('running it', () => {
     expect(output).toContain('✗ ["privates"]')
     expect(output).toMatch(/is `Private` exported/)
     // The malformed target is reported without taking the run down.
-    expect(output).toMatch(/sets both "key" and "route"/)
+    expect(output).toMatch(/sets more than one of "key", "route" and "name"/)
     // Failure is visible to CI…
     expect(code).toBe(1)
 
@@ -556,6 +587,61 @@ describe('running it', () => {
     const { code, output } = run(root)
     expect(code).toBe(1)
     expect(output).toMatch(/Nothing at all resolved/)
+  }, E2E_TIMEOUT)
+
+  /**
+   * The case this exists for: an envelope that arrives over a realtime channel
+   * rather than HTTP. It has no query key and no URL, so before `name` there
+   * was no way to ask for its schema at all.
+   */
+  test('a type with no key and no route still gets a schema', () => {
+    const root = project('named-type', {
+      'tsconfig.json': TSCONFIG,
+      'api.ts': [
+        'export type PresenceEvent = { userId: string; online: boolean }',
+        'export type RealtimePayload<T> = { channel: string; at: number; data: T }',
+        'export type Todo = { id: number; title: string }',
+      ].join('\n'),
+      'data-seed.config.json': JSON.stringify({
+        source: './api.ts',
+        targets: [
+          { key: ['todos'], type: 'Todo[]' },
+          { name: 'RealtimePayload', type: 'RealtimePayload<PresenceEvent>' },
+        ],
+      }),
+    })
+
+    const { code, output } = run(root)
+    expect(code).toBe(0)
+    expect(output).toContain('✓ RealtimePayload  RealtimePayload<PresenceEvent>')
+    // A name is not a path, so it must not be run through the route linter.
+    expect(output).not.toMatch(/does not start with "\/"/)
+
+    const written = JSON.parse(
+      fs.readFileSync(path.join(root, 'data-seed.schemas.json'), 'utf8'),
+    )
+    const entry = written.entries.find(
+      (candidate: { pattern: unknown }) =>
+        JSON.stringify(candidate.pattern) === JSON.stringify({ name: 'RealtimePayload' }),
+    )
+    expect(entry).toBeDefined()
+
+    // The point of the whole feature: a real schema, not the empty object a
+    // type that did not resolve would produce.
+    const document = entry.schema
+    const root$ = document.definitions[
+      decodeURIComponent(document.$ref.replace('#/definitions/', ''))
+    ]
+    expect(Object.keys(root$.properties).sort()).toEqual(['at', 'channel', 'data'])
+
+    // And the runtime reader accepts the file it just wrote, rather than
+    // dropping the new entry into `problems`.
+    const parsed = parseSchemasFile(written)
+    expect(parsed.problems).toEqual([])
+    expect(parsed.entries.map((item) => item.pattern)).toContainEqual({
+      kind: 'type',
+      name: 'RealtimePayload',
+    })
   }, E2E_TIMEOUT)
 
   test('an unparseable config says so instead of throwing', () => {

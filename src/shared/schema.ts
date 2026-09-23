@@ -44,17 +44,21 @@ export type SchemaDocument = SchemaNode & {
  * A v1 file still reads correctly — its array patterns mean exactly what they
  * always did — but a v2 file may contain route strings, which a v1 reader would
  * silently fail to match rather than reject.
+ *
+ * Not bumped for `{"name": …}` patterns: an older reader rejects just that
+ * entry and loads the rest.
  */
 export const SCHEMAS_VERSION = 2
 
 /**
  * One target pattern and the type its response has.
  *
- * `pattern` is either a query key with `"*"` standing for any single element
- * (`["user", "*"]` covers `["user", 7]`), or a route (`"GET /api/users/*"`).
- * Nothing infers this mapping — TypeScript has no idea which type belongs to
- * which key or URL — so it is written by hand in `data-seed.config.json` and is
- * the one piece of this feature that cannot be derived.
+ * `pattern` is a query key with `"*"` standing for any single element
+ * (`["user", "*"]` covers `["user", 7]`), a route (`"GET /api/users/*"`), or
+ * `{"name": …}` for a type that has no address at all. Nothing infers this
+ * mapping — TypeScript has no idea which type belongs to which key or URL — so
+ * it is written by hand in `data-seed.config.json` and is the one piece of this
+ * feature that cannot be derived.
  */
 export type SchemaEntry = {
   pattern: TargetPattern
