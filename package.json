@@ -1,6 +1,6 @@
 {
   "name": "@avasapp/rozenite-plugin-data-seed",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Seed fake data into a running React Native app from DevTools — TanStack Query cache entries or HTTP responses, generated from your own TypeScript types.",
   "type": "module",
   "license": "MIT",
