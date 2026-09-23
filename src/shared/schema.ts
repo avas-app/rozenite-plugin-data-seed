@@ -45,12 +45,8 @@ export type SchemaDocument = SchemaNode & {
  * always did — but a v2 file may contain route strings, which a v1 reader would
  * silently fail to match rather than reject.
  *
- * Deliberately *not* bumped to 3 for `{"name": …}` type patterns. The version
- * gate rejects a whole file, and that is the wrong trade here: an older reader
- * meeting a type pattern rejects that one entry loudly, by name, and loads
- * every key and route entry around it. Bumping would cost an app its entire
- * schemas file for one entry it was never going to seed anyway. The v1→v2 bump
- * earned itself because the old failure was *silent*; this one is not.
+ * Not bumped for `{"name": …}` patterns: an older reader rejects just that
+ * entry and loads the rest.
  */
 export const SCHEMAS_VERSION = 2
 

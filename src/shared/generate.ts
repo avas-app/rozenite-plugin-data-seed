@@ -519,14 +519,6 @@ function uuid(random: () => number): string {
  * Generation has to be reproducible for the same seed, and a value derived from
  * the current time is the one thing that cannot be. The absolute dates are
  * arbitrary; what matters is that they are stable and correctly ordered.
- *
- * The consequence is worth stating, because it is the kind of thing that gets
- * read as a bug: `date.recent` drifts further into the past as real time moves
- * away from this constant, so a caller asserting "within the last hour" writes
- * a test that fails for reasons unconnected to their code. Bumping the epoch
- * would not fix that — it would go stale again, and it would change every
- * value already generated from a committed schema. `date.*` means "ordered
- * relative to the epoch", not "near now", and the token docs say so.
  */
 export const DATE_EPOCH = Date.UTC(2026, 0, 1)
 

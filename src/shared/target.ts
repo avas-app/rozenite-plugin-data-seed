@@ -129,11 +129,8 @@ function urlPathWithQuery(url: string): string {
  * Route patterns are strings like `GET /api/users/*`; key patterns are arrays
  * with `"*"` standing for one element.
  *
- * A `type` pattern selects nothing at all. It exists so the schemas file can
- * carry a schema for a type that has no query key and no URL — an envelope that
- * arrives over a websocket or a realtime channel, say. Nothing in this plugin
- * can seed one; the entry is there for whatever *does* own that transport to
- * read, which is why extraction is worth doing for it and matching is not.
+ * A `type` pattern matches nothing; it carries a schema for a type with no key
+ * or URL, for other tooling to read.
  */
 export type TargetPattern =
   | { kind: 'key'; key: unknown[] }
@@ -245,9 +242,6 @@ export function matchesTarget(pattern: TargetPattern, ref: TargetRef): boolean {
   if (pattern.kind === 'key') {
     return ref.kind === 'key' && matchesKey(pattern.key, ref.key)
   }
-  // A type pattern names a type, not an address, so no observed ref is it.
-  // Returning false rather than throwing keeps such an entry inert: it rides
-  // along in the schemas file and is skipped by every lookup here.
   if (pattern.kind === 'type') return false
   return ref.kind === 'route' && matchesRoute(pattern, ref.method, ref.url)
 }
@@ -263,8 +257,6 @@ export function patternLooseness(pattern: TargetPattern): number {
   if (pattern.kind === 'key') {
     return pattern.key.filter((part) => part === WILDCARD).length
   }
-  // Never actually compared — `findByTarget` only ranks patterns that matched,
-  // and a type pattern never does. Exact, because it names exactly one type.
   if (pattern.kind === 'type') return 0
   const doubles = (pattern.glob.match(/\*\*/g) ?? []).length
   const singles = (pattern.glob.match(/\*/g) ?? []).length - doubles * 2
@@ -292,9 +284,7 @@ export function findByTarget<T extends { pattern: TargetPattern }>(
  * than symmetry — `["user", "*"]` and `"GET /api/users/*"` both read as what
  * they are, where a tagged object would read as neither.
  *
- * A type pattern is the one that has to be tagged: `{"name": "RealtimePayload"}`
- * is neither an array nor a path, and spelling it as a bare string would make
- * it indistinguishable from a route that forgot its leading slash.
+ * A type pattern is tagged, `{"name": …}`, so it can't be mistaken for a route.
  */
 export type TargetPatternJson = unknown[] | string | { name: string }
 

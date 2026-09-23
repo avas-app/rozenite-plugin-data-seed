@@ -280,8 +280,6 @@ export function validateTargets(raw) {
       return
     }
 
-    // A name target is stored tagged, because `{"name": …}` is the only one of
-    // the three that a reader cannot tell apart from the others by shape.
     let pattern
     let label
     if (hasKey) {
@@ -902,16 +900,9 @@ function report({ entries, failures, warnings, out, root, source }) {
 // ---------------------------------------------------------------- tokens
 
 /**
- * Where the built SDK bundle is, according to the package's own `exports`.
- *
- * Not hardcoded, because the Rozenite builder owns that filename and derives it
- * from the entry module — `dist/sdk/index.js` under 2.1, `dist/sdk/sdk.js`
- * under 2.4. Hardcoding it meant `tokens` reported "the package is not built"
- * against a package that was built perfectly well. Reading the map the builder
- * maintains is the only spelling that cannot go stale.
- *
- * `development` is skipped deliberately: it points at the TypeScript source,
- * which is right for a bundler and unloadable from plain Node.
+ * The built SDK bundle, read from `exports` because the Rozenite builder names
+ * it (`index.js` under 2.1, `sdk.js` under 2.4). Skips `development`, which is
+ * TypeScript source.
  */
 function sdkEntryPoints() {
   const root = path.dirname(fileURLToPath(import.meta.url))
@@ -926,9 +917,8 @@ function sdkEntryPoints() {
       if (typeof target === 'string') candidates.push(path.resolve(root, '..', target))
     }
   } catch {
-    // No manifest, or an unreadable one — the fallbacks below still work.
+    // Fall back to the known spellings below.
   }
-  // Both historical spellings, so a checkout built by either Rozenite works.
   candidates.push(path.resolve(root, '../dist/sdk/sdk.js'))
   candidates.push(path.resolve(root, '../dist/sdk/index.js'))
   return candidates.filter((candidate) => !candidate.endsWith('.ts'))
@@ -949,8 +939,6 @@ async function tokens() {
       catalogue = await import(pathToFileURL(entry).href)
       break
     } catch (error) {
-      // Present but unloadable — try the next spelling before giving up, and
-      // keep the first failure: "not built" would be a lie about a broken build.
       unloadable ??= { entry, error }
     }
   }
@@ -1006,8 +994,6 @@ async function tokens() {
   }
   console.log('\n  Unannotated strings become lorem text; unannotated numbers are')
   console.log('  whole. `@faker` is the original spelling of the tag and still works.')
-  // "before the epoch" in the summaries above invites the question, and the
-  // answer is the one thing about dates that surprises people.
   console.log('\n  `date.*` is offset from a fixed epoch, not from now, because the same')
   console.log('  seed has to give the same value every run. Assert on ordering or')
   console.log('  format — never that a generated timestamp is close to the clock.\n')
